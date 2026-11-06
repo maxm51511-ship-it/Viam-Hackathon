@@ -23,7 +23,13 @@
   },
   "robot": {
     "motion_enabled": false,
-    "named_poses": {},
+    "_named_poses_note": "All poses below are UNMEASURED placeholders (null). Populate by jogging the arm to the real position once it's confirmed healthy (no open servo fault) and reading arm.get_end_position() - don't guess coordinates. World-frame pose dict: {x,y,z,o_x,o_y,o_z,theta} in mm/degrees.",
+    "named_poses": {
+      "home": null,
+      "scan": null,
+      "bin_good": null,
+      "bin_failed": null
+    },
     "obstacles": [],
     "gripper": { "max_opening_mm": null, "finger_length_mm": null },
     "release_mode": "operator",
