@@ -362,7 +362,13 @@ MOTION = {
     # Gripper poses in the WORLD frame (mm, orientation vector + theta in degrees).
     # To record one: put the arm there (control card or manual mode), run STEP 0,
     # and copy the printed "gripper pose (world)" dict here.
-    "scan_pose": None,            # camera looking straight down at the plate, 25-45 cm above it
+    # Scan pose recorded 2026-11-06 from the ARM control card (arm end flange):
+    #   x=98.98 y=-601.08 z=471.52 o=(0.04, 0.01, -1) theta=100.79
+    # converted to the GRIPPER frame (105 mm further along the tool axis, per the
+    # machine's frame config). Verify: at this pose STEP 0 should print a
+    # "gripper pose (world)" matching these values.
+    "scan_pose": {"x": 103.18, "y": -600.03, "z": 366.61,
+                  "o_x": 0.04, "o_y": 0.01, "o_z": -1.0, "theta": 100.79},
     "good_bin_pose": None,        # above the WHITE / good-print bin
     "failed_bin_pose": None,      # above the RED / failed-print bin
     "home_pose": None,            # safe resting position, clear of printer and bins
