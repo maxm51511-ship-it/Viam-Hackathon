@@ -369,7 +369,11 @@ MOTION = {
     # "gripper pose (world)" matching these values.
     "scan_pose": {"x": 103.18, "y": -600.03, "z": 366.61,
                   "o_x": 0.04, "o_y": 0.01, "o_z": -1.0, "theta": 100.79},
-    "good_bin_pose": None,        # above the WHITE / good-print bin
+    # Good (WHITE) bin, recorded 2026-11-06 from the ARM card:
+    #   x=46.86 y=-348.4 z=297.51 o=(0.03, -0.03, -1) theta=50.62
+    # converted to the gripper frame (105 mm along the tool axis).
+    "good_bin_pose": {"x": 50.01, "y": -351.55, "z": 192.6,
+                      "o_x": 0.03, "o_y": -0.03, "o_z": -1.0, "theta": 50.62},
     "failed_bin_pose": None,      # above the RED / failed-print bin
     "home_pose": None,            # safe resting position, clear of printer and bins
     # Extra obstacles for the planner, world frame. The PRINTER is not one of the
