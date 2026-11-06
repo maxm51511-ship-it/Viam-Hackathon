@@ -149,7 +149,9 @@ def test_step3_only_hovers(motion_cfg):
     assert run(c, 3) == "hovering"
     assert labels(c) == ["scan", "hover"]
     hover = c.moves[1][1]
-    assert hover["x"] == pytest.approx(SCAN["x"], abs=3) and hover["z"] == pytest.approx(115, abs=3)
+    # fingertips 100 mm above the 15 mm-tall part -> gripper frame 60 mm higher still
+    tip = motion_cfg["fingertip_offset_mm"]
+    assert hover["x"] == pytest.approx(SCAN["x"], abs=3) and hover["z"] - tip == pytest.approx(115, abs=3)
     assert c.gripper.events == []
 
 
@@ -236,3 +238,16 @@ def test_step4_home_equal_to_scan_skips_extra_move(motion_cfg):
     c = cell([scene("white_part")] * 3 + [scene("empty")])
     assert run(c, 4) == "sorted"
     assert labels(c)[-1] == "scan" and "home" not in labels(c)
+
+
+
+def test_fingertips_stay_above_plate_at_grasp(motion_cfg):
+    """Regression: the gripper frame is 60 mm above the fingertips (Viam tutorial).
+    Fingertips must stop plate_clearance_mm above the plate (world z = 0 here)."""
+    ready(motion_cfg, 4)
+    c = cell([scene("white_part")] * 3 + [scene("empty")])
+    run(c, 4)
+    grasp = dict(c.moves)["grasp"]
+    fingertips_z = grasp["z"] - motion_cfg["fingertip_offset_mm"]
+    assert fingertips_z >= motion_cfg["plate_clearance_mm"] - 1.5      # part is 15 mm tall, plate at 0
+    assert fingertips_z == pytest.approx(15 - motion_cfg["grasp_depth_mm"], abs=1.5)

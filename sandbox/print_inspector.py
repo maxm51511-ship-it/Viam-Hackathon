@@ -395,6 +395,12 @@ MOTION = {
     "nudge_up_mm": 30.0,
     "approach_above_mm": 100.0,   # hover height above the print top
     "grasp_depth_mm": 10.0,       # how far below the print top the fingertips go
+    # Distance from the gripper FRAME origin (105 mm from the arm flange) down to
+    # where the fingers close. Viam's xArm6 pick-and-place tutorial uses 60 mm
+    # (GRIPPER_LENGTH_MM). Check in STEP 3: fingertips should hover approach_above_mm
+    # above the print top. If they're higher/lower, adjust this number.
+    "fingertip_offset_mm": 60.0,
+    "settle_s": 0.3,              # pause after gripper open/grab (tutorial value)
     "plate_clearance_mm": 4.0,    # fingertips never closer than this to the plate
     "lift_mm": 120.0,
     "linear_tolerance_mm": 5.0,   # straight-line descend / lift
@@ -511,11 +517,20 @@ def plan_pick(top_world, height_mm, scan_pose):
     if usable < 2.0:
         raise SafetyError(f"print too flat to pinch ({height_mm:.1f} mm)")
     depth = min(MOTION["grasp_depth_mm"], usable)
+    # The poses below are for the GRIPPER FRAME origin, which sits
+    # fingertip_offset_mm ABOVE the point where the fingers close (Viam
+    # pick-and-place tutorial: GRIPPER_LENGTH_MM = 60 for this gripper).
+    # So: fingertips = gripper-frame z - fingertip_offset_mm.
+    tip = MOTION["fingertip_offset_mm"]
+    fingertips_z = top_z - depth
+    min_z = MOTION["workspace"]["min_z_mm"]
+    if fingertips_z < min_z:     # the fence applies to the fingertips, not just the gripper frame
+        raise SafetyError(f"grasp: fingertips would be at z={fingertips_z:.0f} mm - outside fence (min z {min_z} mm)")
     orient = {k: scan_pose[k] for k in ("o_x", "o_y", "o_z", "theta")}
     return {
-        "hover": {"x": x, "y": y, "z": round(top_z + MOTION["approach_above_mm"], 1), **orient},
-        "grasp": {"x": x, "y": y, "z": round(top_z - depth, 1), **orient},
-        "lift": {"x": x, "y": y, "z": round(top_z + MOTION["lift_mm"], 1), **orient},
+        "hover": {"x": x, "y": y, "z": round(top_z + MOTION["approach_above_mm"] + tip, 1), **orient},
+        "grasp": {"x": x, "y": y, "z": round(top_z - depth + tip, 1), **orient},
+        "lift": {"x": x, "y": y, "z": round(top_z + MOTION["lift_mm"] + tip, 1), **orient},
     }
 
 
@@ -600,16 +615,23 @@ async def run_step(cell, step):
 
     if step == 3:
         await move_gripper(cell, "hover", poses["hover"])
-        print("STEP 3 done - hovering above the print. Check it is centred before trying STEP 4.")
+        print("STEP 3 done - hovering above the print. Check it is centred, and that the FINGERTIPS are "
+              f"~{m['approach_above_mm']:.0f} mm above the print top, before trying STEP 4.")
         return "hovering"
 
-    await cell.gripper.open()
     await move_gripper(cell, "hover", poses["hover"])
+    await cell.gripper.open()
+    await asyncio.sleep(m["settle_s"])                 # let the fingers finish opening
     await move_gripper(cell, "grasp", poses["grasp"], linear=True)
     grabbed = await cell.gripper.grab()
-    status = await cell.gripper.is_holding_something()
-    holding = getattr(status, "is_holding_something", grabbed)
-    if not (grabbed and holding):
+    await asyncio.sleep(m["settle_s"])                 # let the grip settle
+    try:
+        status = await cell.gripper.is_holding_something()
+        holding = getattr(status, "is_holding_something", None)
+    except Exception:
+        holding = None                                 # not every gripper reports this
+    print(f"  grab() -> {grabbed}, is_holding_something -> {holding}")
+    if not grabbed and not holding:
         print("!! grasp failed - opening and backing off")
         await cell.gripper.open()
         await move_gripper(cell, "retreat", poses["hover"], linear=True)
@@ -617,6 +639,7 @@ async def run_step(cell, step):
     await move_gripper(cell, "lift", poses["lift"], linear=True)
     await move_gripper(cell, bin_name, m[bin_name])
     await cell.gripper.open()
+    await asyncio.sleep(m["settle_s"])
     await move_gripper(cell, "scan", m["scan_pose"])
     after, why, _ = await inspect_plate(cell)
     print(f"plate after removal: {after} ({why})")

@@ -12,6 +12,12 @@ Run **one step per run** and don't skip ahead. After each run, set `"STEP": 0` a
 - [ ] The Sandbox `main.py` contains the **latest** `print_inspector.py` from the `feat/project-foundation` branch.
 - [ ] Manual mode is **off**: click *Exit manual mode* in the arm panel.
 
+## One-time machine checks (CONFIGURE tab, from the Viam pick-and-place tutorial)
+
+- [ ] **cam → attributes** include `"align_color_depth": true`, and `sensors` contains both `"color"` and `"depth"`. Without alignment, the colour of each depth point is wrong and red/white classification breaks. If it's missing, ask a Viam staff member before changing the machine config.
+- [ ] **cam → frame.** Viam's tutorial for this same hardware uses translation `(-73, 40, 18)` with orientation θ `270`. The overview PDF says `(73, -40, 18)` with θ `90`. Write down which one your machine has. If Test 4's hover is off-centre by roughly 8–15 cm, this frame is the likely cause.
+- [ ] **gripper → frame** is translation z `105` (both sources agree).
+
 ## Test 1: STEP 0, vision only (no motion)
 
 1. Move the arm to the scan position (jog it, or put it there in manual mode). Put the **white dome** in the middle of the gold sheet.
@@ -51,6 +57,7 @@ Run **one step per run** and don't skip ahead. After each run, set `"STEP": 0` a
 1. Put the white dome on the sheet and set `"STEP": 3`.
 2. **Pass if:** the arm goes to scan, inspects (`VERDICT: GOOD`), then moves to about **10 cm above the dome**, centred over it.
 3. Measure how far off-centre it is. If it's more than about 1 cm, **don't run STEP 4**. Send us the offset and its direction instead, because the camera position needs calibrating.
+4. **Measure the gap between the fingertips and the top of the dome.** It should be about **100 mm** (`approach_above_mm`). If it's a different value, send it to us: it means `fingertip_offset_mm` (60 mm, taken from Viam's tutorial) needs adjusting before STEP 4. Otherwise the gripper will close too high, or push down into the plate.
 
 ## Test 5: STEP 4, full pick and sort
 
