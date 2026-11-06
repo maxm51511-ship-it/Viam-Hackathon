@@ -198,3 +198,40 @@ def test_failed_grab_backs_off(motion_cfg):
     assert run(c, 4) == "grasp failed"
     assert labels(c) == ["scan", "hover", "grasp", "retreat"]
     assert c.gripper.events == ["open", "grab", "open"]
+
+
+HOME = {"x": 250.0, "y": 0.0, "z": 450.0, "o_x": 0.0, "o_y": 0.0, "o_z": -1.0, "theta": 0.0}
+
+
+def test_step5_goes_home(motion_cfg):
+    motion_cfg.update(I_AM_AT_THE_ESTOP=True, home_pose=HOME)
+    c = cell([scene("empty")])
+    assert run(c, 5) == "at home" and labels(c) == ["home"]
+
+
+def test_step5_requires_home_pose(motion_cfg):
+    motion_cfg["I_AM_AT_THE_ESTOP"] = True
+    with pytest.raises(pi.SafetyError, match="home_pose"):
+        run(cell([scene("empty")]), 5)
+
+
+def test_step4_ends_at_home_when_set(motion_cfg):
+    ready(motion_cfg, 4)
+    motion_cfg["home_pose"] = HOME
+    c = cell([scene("white_part")] * 3 + [scene("empty")])
+    assert run(c, 4) == "sorted"
+    assert labels(c)[-2:] == ["scan", "home"]
+
+
+def test_unknown_step_refused(motion_cfg):
+    motion_cfg["I_AM_AT_THE_ESTOP"] = True
+    with pytest.raises(pi.SafetyError, match="unknown STEP"):
+        run(cell([scene("empty")]), 9)
+
+
+def test_step4_home_equal_to_scan_skips_extra_move(motion_cfg):
+    ready(motion_cfg, 4)
+    motion_cfg["home_pose"] = dict(SCAN)
+    c = cell([scene("white_part")] * 3 + [scene("empty")])
+    assert run(c, 4) == "sorted"
+    assert labels(c)[-1] == "scan" and "home" not in labels(c)

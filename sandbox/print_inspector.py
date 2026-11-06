@@ -7,7 +7,11 @@ MOTION IS OFF BY DEFAULT. Set MOTION["STEP"] (further down) to choose what a run
     STEP 1  nudge the gripper straight UP 30 mm (first motion test).
     STEP 2  move to the recorded scan pose.
     STEP 3  scan, inspect, then HOVER above the detected print (no contact).
-    STEP 4  full cycle: scan, inspect, pick, drop in good/failed bin, back to scan.
+    STEP 4  full cycle: scan, inspect, pick, drop in good/failed bin, back to scan,
+            verify plate is empty, then go to home_pose (if set).
+    STEP 5  go to home_pose (the arm's safe resting position).
+Poses are absolute positions in the WORLD frame, whose origin (0,0,0) is the
+base of the arm, so the arm can always return to a recorded pose.
 Every STEP >= 1 also needs MOTION["I_AM_AT_THE_ESTOP"] = True. Only advance a
 step after the previous one behaved correctly. All moves go through the motion
 service, which plans around the table/wall/ceiling obstacles - never direct arm
@@ -358,16 +362,36 @@ MOTION = {
     # Gripper poses in the WORLD frame (mm, orientation vector + theta in degrees).
     # To record one: put the arm there (control card or manual mode), run STEP 0,
     # and copy the printed "gripper pose (world)" dict here.
-    "scan_pose": None,            # camera looking straight down at the plate, 25-45 cm above it
-    "good_bin_pose": None,        # above the WHITE / good-print bin
-    "failed_bin_pose": None,      # above the RED / failed-print bin
+    # Scan pose recorded 2026-11-06 from the ARM control card (arm end flange):
+    #   x=98.98 y=-601.08 z=471.52 o=(0.04, 0.01, -1) theta=100.79
+    # converted to the GRIPPER frame (105 mm further along the tool axis, per the
+    # machine's frame config). Verify: at this pose STEP 0 should print a
+    # "gripper pose (world)" matching these values.
+    "scan_pose": {"x": 103.18, "y": -600.03, "z": 366.61,
+                  "o_x": 0.04, "o_y": 0.01, "o_z": -1.0, "theta": 100.79},
+    # Good (WHITE) bin, recorded 2026-11-06 from the ARM card:
+    #   x=46.86 y=-348.4 z=297.51 o=(0.03, -0.03, -1) theta=50.62
+    # converted to the gripper frame (105 mm along the tool axis).
+    "good_bin_pose": {"x": 50.01, "y": -351.55, "z": 192.6,
+                      "o_x": 0.03, "o_y": -0.03, "o_z": -1.0, "theta": 50.62},
+    # Failed (RED) bin, recorded 2026-11-06 from the ARM card:
+    #   x=283.5 y=-564.94 z=289.29 o=(0.05, -0.03, -1) theta=-30.53
+    # converted to the gripper frame (105 mm along the tool axis).
+    # Reach 637 mm - close to the 650 mm fence; don't move this bin further out.
+    "failed_bin_pose": {"x": 288.74, "y": -568.08, "z": 184.47,
+                        "o_x": 0.05, "o_y": -0.03, "o_z": -1.0, "theta": -30.53},
+    "home_pose": None,            # set below: home = scan pose (team decision 2026-11-06)
     # Extra obstacles for the planner, world frame. The PRINTER is not one of the
     # machine's preconfigured obstacles (table, wall-front, wall-side, ceiling):
     #   [{"label": "printer_frame", "center": {"x": .., "y": .., "z": ..},
     #     "dims_mm": {"x": .., "y": .., "z": ..}}]
     # Keep the boxes AROUND the bed, not over it. Set [] to say "none needed".
     # STEP 3 and 4 refuse to run while this is None.
-    "extra_obstacles": None,
+    # Demo setup (2026-11-06): NO printer - the "build plate" is a PEI sheet lying
+    # on a box, with nothing above it, and the arm approaches from above. The
+    # box sits BELOW the plate surface, and the fingertips stop
+    # plate_clearance_mm above the plate, so no extra obstacle is needed.
+    "extra_obstacles": [],
     "nudge_up_mm": 30.0,
     "approach_above_mm": 100.0,   # hover height above the print top
     "grasp_depth_mm": 10.0,       # how far below the print top the fingertips go
@@ -377,6 +401,11 @@ MOTION = {
     # Software workspace fence (world frame). Every target is checked before moving.
     "workspace": {"min_z_mm": 5.0, "max_z_mm": 700.0, "min_reach_mm": 150.0, "max_reach_mm": 650.0},
 }
+
+
+# Home = scan pose: the arm rests looking down at the plate, ready for the next
+# inspection. Follows scan_pose automatically if you re-record it.
+MOTION["home_pose"] = dict(MOTION["scan_pose"]) if MOTION["scan_pose"] else None
 
 
 class SafetyError(RuntimeError):
@@ -499,16 +528,21 @@ async def run_step(cell, step):
     m = MOTION
     if step >= 1:
         require(m["I_AM_AT_THE_ESTOP"], "set MOTION['I_AM_AT_THE_ESTOP'] = True (someone at the E-stop) to move")
-    if step >= 2:
+    if step not in (0, 1, 2, 3, 4, 5):
+        raise SafetyError(f"unknown STEP {step}")
+    if 2 <= step <= 4:
         probs = check_pose("scan_pose", m["scan_pose"])
         require(not probs, "; ".join(probs))
-    if step >= 3:
+    if 3 <= step <= 4:
         require(m["extra_obstacles"] is not None,
                 "measure the printer and set MOTION['extra_obstacles'] (or [] if none) before STEP 3/4")
-    if step >= 4:
+    if step == 4:
         for k in ("good_bin_pose", "failed_bin_pose"):
             probs = check_pose(k, m[k])
             require(not probs, "; ".join(probs))
+    if step == 5 or (step == 4 and m["home_pose"] is not None):
+        probs = check_pose("home_pose", m["home_pose"])
+        require(not probs, "; ".join(probs))
 
     here = await current_gripper_pose(cell)
     print(f"gripper pose (world): {here}")
@@ -520,7 +554,7 @@ async def run_step(cell, step):
                   f"o=({p.o_x:.2f},{p.o_y:.2f},{p.o_z:.2f}) theta={p.theta:.1f}")
         except Exception as e:
             print("could not read arm pose:", e)
-        for k in ("scan_pose", "good_bin_pose", "failed_bin_pose"):
+        for k in ("scan_pose", "good_bin_pose", "failed_bin_pose", "home_pose"):
             probs = check_pose(k, m[k])
             print(f"  {k}: {'OK' if not probs else '; '.join(probs)}")
         verdict, _, obs = await inspect_plate(cell)
@@ -538,6 +572,10 @@ async def run_step(cell, step):
         print(f"gripper pose after: {after}  (dz = {after['z'] - here['z']:+.1f} mm, "
               f"expected +{m['nudge_up_mm']})")
         return "nudged"
+
+    if step == 5:
+        await move_gripper(cell, "home", m["home_pose"])
+        return "at home"
 
     await move_gripper(cell, "scan", m["scan_pose"])
     if step == 2:
@@ -582,6 +620,8 @@ async def run_step(cell, step):
     await move_gripper(cell, "scan", m["scan_pose"])
     after, why, _ = await inspect_plate(cell)
     print(f"plate after removal: {after} ({why})")
+    if m["home_pose"] is not None and m["home_pose"] != m["scan_pose"]:
+        await move_gripper(cell, "home", m["home_pose"])   # already there if home == scan
     return "sorted" if after == "EMPTY" else "plate not clear"
 
 
