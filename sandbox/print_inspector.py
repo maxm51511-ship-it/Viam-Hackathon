@@ -430,7 +430,7 @@ MOTION = {
     "lift_mm": 120.0,
     "linear_tolerance_mm": 5.0,   # straight-line descend / lift
     "linear_orientation_tolerance_degs": 5.0,  # gripper may tilt/turn this much along a straight line
-    "linear_moves": True,         # set False if straight-line moves fail to plan
+    "linear_moves": False,        # OFF for the demo: only unconstrained moves (like STEP 2) are proven on the arm
     # Software workspace fence (world frame). Every target is checked before moving.
     "workspace": {"min_z_mm": 5.0, "max_z_mm": 700.0, "min_reach_mm": 150.0, "max_reach_mm": 650.0},
 }

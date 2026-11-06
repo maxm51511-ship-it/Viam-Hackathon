@@ -138,7 +138,7 @@ def test_motion_refused_without_estop_flag():
 
 
 def test_step1_nudges_up_in_a_straight_line(motion_cfg):
-    motion_cfg["I_AM_AT_THE_ESTOP"] = True
+    motion_cfg.update(I_AM_AT_THE_ESTOP=True, linear_moves=True)
     c = cell([scene("empty")])
     assert run(c, 1) == "nudged"
     (pose, cons), = c.motion.calls
@@ -300,7 +300,7 @@ def test_viam_apis_registered_before_connect():
 
 
 def test_linear_constraint_sets_orientation_tolerance(motion_cfg):
-    motion_cfg["I_AM_AT_THE_ESTOP"] = True
+    motion_cfg.update(I_AM_AT_THE_ESTOP=True, linear_moves=True)
     c = cell([scene("empty")])
     run(c, 1)
     (_, cons), = c.motion.calls
