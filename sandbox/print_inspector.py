@@ -374,7 +374,12 @@ MOTION = {
     # converted to the gripper frame (105 mm along the tool axis).
     "good_bin_pose": {"x": 50.01, "y": -351.55, "z": 192.6,
                       "o_x": 0.03, "o_y": -0.03, "o_z": -1.0, "theta": 50.62},
-    "failed_bin_pose": None,      # above the RED / failed-print bin
+    # Failed (RED) bin, recorded 2026-11-06 from the ARM card:
+    #   x=283.5 y=-564.94 z=289.29 o=(0.05, -0.03, -1) theta=-30.53
+    # converted to the gripper frame (105 mm along the tool axis).
+    # Reach 637 mm - close to the 650 mm fence; don't move this bin further out.
+    "failed_bin_pose": {"x": 288.74, "y": -568.08, "z": 184.47,
+                        "o_x": 0.05, "o_y": -0.03, "o_z": -1.0, "theta": -30.53},
     "home_pose": None,            # safe resting position, clear of printer and bins
     # Extra obstacles for the planner, world frame. The PRINTER is not one of the
     # machine's preconfigured obstacles (table, wall-front, wall-side, ceiling):
