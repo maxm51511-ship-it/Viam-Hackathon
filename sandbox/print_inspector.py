@@ -40,6 +40,7 @@ import math
 import os
 import random
 import struct
+import sys
 import time
 
 # All Viam imports MUST be at module level, BEFORE connecting: the SDK only
@@ -302,13 +303,51 @@ def decide(observations, n_required):
 
 
 # ----------------------------------------------------------------- Viam I/O
+def load_dotenv_if_present():
+    """Running LOCALLY: read VIAM_* from a .env file (next to this script or in the
+    repo root). The Sandbox injects them itself, so this is a no-op there.
+    Existing environment variables always win. Values are never printed."""
+    here = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+    for path in (os.path.join(here, ".env"), os.path.join(here, "..", ".env"), os.path.join(os.getcwd(), ".env")):
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, _, v = line.partition("=")
+                        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+            return path
+    return None
+
+
+def apply_command_line():
+    """Local runs:  python sandbox/print_inspector.py [STEP] [--estop]
+    e.g.  python sandbox/print_inspector.py 0          (vision only)
+          python sandbox/print_inspector.py 3 --estop  (hover; someone at the E-stop)
+    With no arguments (the Sandbox), the MOTION block values are used."""
+    args = [a for a in sys.argv[1:] if a.strip()]
+    for a in args:
+        if a.lstrip("-").lower() in ("estop", "e-stop", "i-am-at-the-estop"):
+            MOTION["I_AM_AT_THE_ESTOP"] = True
+        elif a.isdigit():
+            MOTION["STEP"] = int(a)
+        elif a in ("-h", "--help"):
+            print(apply_command_line.__doc__)
+            raise SystemExit(0)
+        else:
+            raise SystemExit(f"unknown argument {a!r}. Usage: print_inspector.py [STEP 0-6] [--estop]")
+
+
 async def connect():
     """Same environment variables as the Sandbox template."""
 
+    load_dotenv_if_present()
     addr = next((os.environ[k] for k in ("VIAM_MACHINE_ADDRESS", "VIAM_ADDRESS", "VIAM_ROBOT_ADDRESS",
                                          "MACHINE_ADDRESS") if os.environ.get(k)), None)
     if addr is None:
-        raise RuntimeError("machine address env var not found; paste the Sandbox template's connect() here. "
+        raise RuntimeError("machine address not found. LOCAL run: copy .env.example to .env in the repo "
+                           "folder and fill in VIAM_MACHINE_ADDRESS, VIAM_API_KEY, VIAM_API_KEY_ID (CONNECT tab). "
+                           "SANDBOX: paste the template's connect() here. "
                            "VIAM_* vars present: " + ", ".join(k for k in os.environ if k.startswith("VIAM")))
     opts = RobotClient.Options.with_api_key(api_key=os.environ["VIAM_API_KEY"],
                                             api_key_id=os.environ["VIAM_API_KEY_ID"])
@@ -797,4 +836,6 @@ async def main():
 
 
 if __name__ == "__main__":
+    apply_command_line()
+    print(f"STEP {MOTION['STEP']}, E-stop flag {MOTION['I_AM_AT_THE_ESTOP']}")
     asyncio.run(main())
