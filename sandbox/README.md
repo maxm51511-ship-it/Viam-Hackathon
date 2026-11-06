@@ -73,9 +73,12 @@ Movement is controlled by the `MOTION` block near the bottom of the script. Each
 | 1 | Moves the gripper straight **up 30 mm** | E-stop flag | It moved up by about 30 mm and nothing else happened. |
 | 2 | Moves to `scan_pose` | `scan_pose` | The camera ends up looking straight down at the plate. |
 | 3 | Scan, inspect, then **hover** 100 mm above the print. Nothing touches the print. | `extra_obstacles` (the printer; `[]` if none) | The gripper is centred over the print. |
-| 4 | Full cycle: open, hover, descend, grab, lift, drop in the good or failed bin, return to scan, check the plate is empty | `good_bin_pose`, `failed_bin_pose` | |
+| 4 | Full cycle: open, hover, descend, grab, lift, drop in the good or failed bin, return to scan, check the plate is empty, then go to `home_pose` if it is set | `good_bin_pose`, `failed_bin_pose` | |
+| 5 | Go to `home_pose`, the arm's safe resting position | `home_pose` | It goes there and stops clear of the printer and bins. |
 
-**Recording a pose** (scan pose, good bin, failed bin):
+**Where poses are measured from:** every pose is an absolute position in the world frame. Its origin (0, 0, 0) is the **base of the arm**, so the arm can always return to a recorded pose.
+
+**Recording a pose** (scan pose, good bin, failed bin, home):
 1. Move the arm to the position, using the control card or manual mode.
 2. Run `STEP 0`.
 3. Copy the printed `gripper pose (world)` dict into `MOTION`. For example:

@@ -7,7 +7,11 @@ MOTION IS OFF BY DEFAULT. Set MOTION["STEP"] (further down) to choose what a run
     STEP 1  nudge the gripper straight UP 30 mm (first motion test).
     STEP 2  move to the recorded scan pose.
     STEP 3  scan, inspect, then HOVER above the detected print (no contact).
-    STEP 4  full cycle: scan, inspect, pick, drop in good/failed bin, back to scan.
+    STEP 4  full cycle: scan, inspect, pick, drop in good/failed bin, back to scan,
+            verify plate is empty, then go to home_pose (if set).
+    STEP 5  go to home_pose (the arm's safe resting position).
+Poses are absolute positions in the WORLD frame, whose origin (0,0,0) is the
+base of the arm, so the arm can always return to a recorded pose.
 Every STEP >= 1 also needs MOTION["I_AM_AT_THE_ESTOP"] = True. Only advance a
 step after the previous one behaved correctly. All moves go through the motion
 service, which plans around the table/wall/ceiling obstacles - never direct arm
@@ -361,6 +365,7 @@ MOTION = {
     "scan_pose": None,            # camera looking straight down at the plate, 25-45 cm above it
     "good_bin_pose": None,        # above the WHITE / good-print bin
     "failed_bin_pose": None,      # above the RED / failed-print bin
+    "home_pose": None,            # safe resting position, clear of printer and bins
     # Extra obstacles for the planner, world frame. The PRINTER is not one of the
     # machine's preconfigured obstacles (table, wall-front, wall-side, ceiling):
     #   [{"label": "printer_frame", "center": {"x": .., "y": .., "z": ..},
@@ -499,16 +504,21 @@ async def run_step(cell, step):
     m = MOTION
     if step >= 1:
         require(m["I_AM_AT_THE_ESTOP"], "set MOTION['I_AM_AT_THE_ESTOP'] = True (someone at the E-stop) to move")
-    if step >= 2:
+    if step not in (0, 1, 2, 3, 4, 5):
+        raise SafetyError(f"unknown STEP {step}")
+    if 2 <= step <= 4:
         probs = check_pose("scan_pose", m["scan_pose"])
         require(not probs, "; ".join(probs))
-    if step >= 3:
+    if 3 <= step <= 4:
         require(m["extra_obstacles"] is not None,
                 "measure the printer and set MOTION['extra_obstacles'] (or [] if none) before STEP 3/4")
-    if step >= 4:
+    if step == 4:
         for k in ("good_bin_pose", "failed_bin_pose"):
             probs = check_pose(k, m[k])
             require(not probs, "; ".join(probs))
+    if step == 5 or (step == 4 and m["home_pose"] is not None):
+        probs = check_pose("home_pose", m["home_pose"])
+        require(not probs, "; ".join(probs))
 
     here = await current_gripper_pose(cell)
     print(f"gripper pose (world): {here}")
@@ -520,7 +530,7 @@ async def run_step(cell, step):
                   f"o=({p.o_x:.2f},{p.o_y:.2f},{p.o_z:.2f}) theta={p.theta:.1f}")
         except Exception as e:
             print("could not read arm pose:", e)
-        for k in ("scan_pose", "good_bin_pose", "failed_bin_pose"):
+        for k in ("scan_pose", "good_bin_pose", "failed_bin_pose", "home_pose"):
             probs = check_pose(k, m[k])
             print(f"  {k}: {'OK' if not probs else '; '.join(probs)}")
         verdict, _, obs = await inspect_plate(cell)
@@ -538,6 +548,10 @@ async def run_step(cell, step):
         print(f"gripper pose after: {after}  (dz = {after['z'] - here['z']:+.1f} mm, "
               f"expected +{m['nudge_up_mm']})")
         return "nudged"
+
+    if step == 5:
+        await move_gripper(cell, "home", m["home_pose"])
+        return "at home"
 
     await move_gripper(cell, "scan", m["scan_pose"])
     if step == 2:
@@ -582,6 +596,8 @@ async def run_step(cell, step):
     await move_gripper(cell, "scan", m["scan_pose"])
     after, why, _ = await inspect_plate(cell)
     print(f"plate after removal: {after} ({why})")
+    if m["home_pose"] is not None:
+        await move_gripper(cell, "home", m["home_pose"])
     return "sorted" if after == "EMPTY" else "plate not clear"
 
 
