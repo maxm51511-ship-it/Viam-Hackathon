@@ -82,3 +82,25 @@ Run **one step per run** and don't skip ahead. After each run, set `"STEP": 0` a
 - The console output for each test, or a screenshot.
 - For any failure: the step number, what the arm did, and the `REFUSED:` or error message.
 - If a position was re-recorded: the new values from the arm card.
+
+## Troubleshooting: "the arm won't move"
+
+Work through these in order. Each check rules out one cause.
+
+1. **Is it our script refusing?** Look at the last lines of the console.
+   - `RESULT (STEP 0): read-only` means STEP 0 never moves. Set `"STEP": 1` or higher.
+   - `REFUSED: set MOTION['I_AM_AT_THE_ESTOP'] = True` means exactly that.
+   - `REFUSED: ... outside fence` means a saved position or a planned position is outside the software fence. The message names which one.
+   - `MOVE FAILED: ...` means Viam tried to move and couldn't. Continue with the checks below.
+2. **Manual mode.** CONFIGURE → **arm** → Test → Control → **Exit manual mode**. The arm ignores move commands while it's in manual mode.
+3. **E-stop and controller.**
+   - Release the E-stop: twist the red button until it pops up.
+   - The UFactory controller may need to clear its error state after an E-stop or a collision. Ask Viam staff how to do this on the event machines.
+4. **Can the Viam app move it at all?** In the CONTROL tab, on the **arm** card, jog one joint by 5°.
+   - **If that fails,** the problem is the arm, the controller or the config, not our code. Check the **LOGS** tab and ask Viam staff.
+   - **If it works,** the arm is fine. Continue below.
+5. **Motion planning.**
+   - Open the **3D SCENE** tab. If the arm or gripper is drawn *inside* an obstacle box (table, wall-front, wall-side, ceiling), every plan fails. Move the arm out of it with a joint jog or manual mode.
+   - Try the same target from the **MOTION** tab in the app, if your version has one.
+   - Set `"linear_moves": False` in `MOTION` and run again. Straight-line moves are harder to plan.
+6. **LOGS tab.** Find the error at the time of your run and send it to us, together with the console output.

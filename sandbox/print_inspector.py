@@ -404,6 +404,7 @@ MOTION = {
     "plate_clearance_mm": 4.0,    # fingertips never closer than this to the plate
     "lift_mm": 120.0,
     "linear_tolerance_mm": 5.0,   # straight-line descend / lift
+    "linear_moves": True,         # set False if straight-line moves fail to plan
     # Software workspace fence (world frame). Every target is checked before moving.
     "workspace": {"min_z_mm": 5.0, "max_z_mm": 700.0, "min_reach_mm": 150.0, "max_reach_mm": 650.0},
 }
@@ -483,7 +484,7 @@ async def move_gripper(cell, label, pose, linear=False):
     if problems:
         raise SafetyError("; ".join(problems))
     constraints = None
-    if linear:
+    if linear and MOTION["linear_moves"]:
         constraints = Constraints(linear_constraint=[LinearConstraint(
             line_tolerance_mm=MOTION["linear_tolerance_mm"])])
     print(f"  -> move {label}{' (straight line)' if linear else ''}: {pose}")
@@ -648,6 +649,19 @@ async def run_step(cell, step):
     return "sorted" if after == "EMPTY" else "plate not clear"
 
 
+MOVE_FAILED_HINTS = """Likely causes (check in this order):
+  1. Arm is still in MANUAL MODE -> CONFIGURE > arm > Test > Control > Exit manual mode.
+  2. E-stop pressed or the arm controller is in an error state -> release the E-stop
+     (twist it), then try a 5-degree joint jog on the arm card. If THAT fails too,
+     the problem is the arm/controller, not this script - ask Viam staff.
+  3. Planning failed ('no solution', 'collision', 'timeout'):
+     - open the 3D SCENE tab: is the arm or gripper INSIDE an obstacle box (table,
+       wall-front, wall-side, ceiling)? If the start pose is in collision, every plan fails.
+     - is the target reachable? Try it from the MOTION tab in the app.
+     - straight-line moves are harder to plan: set MOTION["linear_moves"] = False and retry.
+  4. Check the LOGS tab for the arm / motion error at the same timestamp."""
+
+
 async def main():
     robot = await connect()
     try:
@@ -658,6 +672,9 @@ async def main():
             print(f"\nRESULT (STEP {MOTION['STEP']}): {result}")
         except SafetyError as e:
             print(f"\nREFUSED (STEP {MOTION['STEP']}): {e}")
+        except Exception as e:
+            print(f"\nMOVE FAILED (STEP {MOTION['STEP']}): {type(e).__name__}: {e}")
+            print(MOVE_FAILED_HINTS)
         if MOTION["STEP"] == 0:
             print("\n--- cross-check: existing vision services on this machine")
             await compare_vision_services(robot)

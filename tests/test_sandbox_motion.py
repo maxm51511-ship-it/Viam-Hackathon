@@ -251,3 +251,11 @@ def test_fingertips_stay_above_plate_at_grasp(motion_cfg):
     fingertips_z = grasp["z"] - motion_cfg["fingertip_offset_mm"]
     assert fingertips_z >= motion_cfg["plate_clearance_mm"] - 1.5      # part is 15 mm tall, plate at 0
     assert fingertips_z == pytest.approx(15 - motion_cfg["grasp_depth_mm"], abs=1.5)
+
+
+def test_linear_moves_can_be_switched_off(motion_cfg):
+    motion_cfg.update(I_AM_AT_THE_ESTOP=True, linear_moves=False)
+    c = cell([scene("empty")])
+    run(c, 1)
+    (_, cons), = c.motion.calls
+    assert cons is None
