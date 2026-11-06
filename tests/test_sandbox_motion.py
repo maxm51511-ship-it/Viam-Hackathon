@@ -345,18 +345,13 @@ def test_step4_with_switch_uses_reached_orientation(motion_cfg):
     assert dict(c.moves)["grasp"]["theta"] == pytest.approx(SAVED_SCAN["theta"])
 
 
-def test_missing_switch_name_is_refused(motion_cfg):
+def test_missing_switch_falls_back_to_planner(motion_cfg, capsys):
+    """A wrong/missing switch name must not block anything: scan_pose via the
+    planner works on this machine (theta - 180 fix)."""
     class R:
         resource_names = []
-    motion_cfg.update(scan_switch="scan-pose", STEP=1)      # moving steps refuse
-    with pytest.raises(pi.SafetyError, match="scan_switch 'scan-pose' not found"):
-        pi.Cell.from_robot(R())
-
-
-def test_missing_switch_only_warns_in_step0(motion_cfg, capsys):
-    class R:
-        resource_names = []
-    motion_cfg.update(scan_switch="scan-pose", STEP=0)
-    with pytest.raises(AttributeError):   # past the switch check; then the bare fake robot has no services
-        pi.Cell.from_robot(R())
-    assert "WARNING: scan_switch 'scan-pose' not found" in capsys.readouterr().out
+    for step in (0, 2, 4):
+        motion_cfg.update(scan_switch="scan-pose", STEP=step)
+        with pytest.raises(AttributeError):   # past the switch check; the bare fake robot has no services
+            pi.Cell.from_robot(R())
+        assert "NOTE: scan_switch 'scan-pose' not found" in capsys.readouterr().out

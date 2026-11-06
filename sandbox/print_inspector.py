@@ -374,24 +374,22 @@ MOTION = {
     # Gripper poses in the WORLD frame (mm, orientation vector + theta in degrees).
     # To record one: put the arm there (control card or manual mode), run STEP 0,
     # and copy the printed "gripper pose (world)" dict here.
-    # Scan pose recorded 2026-11-06 from the ARM control card (arm end flange):
-    #   x=98.98 y=-601.08 z=471.52 o=(0.04, 0.01, -1) theta=100.79
-    # converted to the GRIPPER frame (105 mm further along the tool axis, per the
-    # machine's frame config). Verify: at this pose STEP 0 should print a
-    # "gripper pose (world)" matching these values.
+    # ARM CARD -> GRIPPER conversion on THIS machine (team fix, 2026-11-06, made
+    # STEP 2 plan successfully): position = flange + 105 mm along the tool axis,
+    # and theta - 180 deg because the gripper frame is rotated 180 deg about z
+    # relative to the flange. Without the 180 the planner rejected the scan pose
+    # with a wrist/camera self-collision. (Poses copied from STEP 0's
+    # "gripper pose (world)" line need NO conversion.)
+    # Scan pose, from the ARM card: x=98.98 y=-601.08 z=471.52 o=(0.04, 0.01, -1) theta=100.79
     "scan_pose": {"x": 103.18, "y": -600.03, "z": 366.61,
-                  "o_x": 0.04, "o_y": 0.01, "o_z": -1.0, "theta": 100.79},
-    # Good (WHITE) bin, recorded 2026-11-06 from the ARM card:
-    #   x=46.86 y=-348.4 z=297.51 o=(0.03, -0.03, -1) theta=50.62
-    # converted to the gripper frame (105 mm along the tool axis).
+                  "o_x": 0.04, "o_y": 0.01, "o_z": -1.0, "theta": -79.21},
+    # Good (WHITE) bin, from the ARM card: x=46.86 y=-348.4 z=297.51 o=(0.03, -0.03, -1) theta=50.62
     "good_bin_pose": {"x": 50.01, "y": -351.55, "z": 192.6,
-                      "o_x": 0.03, "o_y": -0.03, "o_z": -1.0, "theta": 50.62},
-    # Failed (RED) bin, recorded 2026-11-06 from the ARM card:
-    #   x=283.5 y=-564.94 z=289.29 o=(0.05, -0.03, -1) theta=-30.53
-    # converted to the gripper frame (105 mm along the tool axis).
+                      "o_x": 0.03, "o_y": -0.03, "o_z": -1.0, "theta": -129.38},
+    # Failed (RED) bin, from the ARM card: x=283.5 y=-564.94 z=289.29 o=(0.05, -0.03, -1) theta=-30.53
     # Reach 637 mm - close to the 650 mm fence; don't move this bin further out.
     "failed_bin_pose": {"x": 288.74, "y": -568.08, "z": 184.47,
-                        "o_x": 0.05, "o_y": -0.03, "o_z": -1.0, "theta": -30.53},
+                        "o_x": 0.05, "o_y": -0.03, "o_z": -1.0, "theta": 149.47},
     "home_pose": None,            # set below: home = scan pose (team decision 2026-11-06)
     # Arm-position-saver (erh:vmodutils:arm-position-saver) holding the SCAN pose,
     # added by a Viam dev. If set, the arm goes to scan/home with
@@ -460,14 +458,14 @@ class Cell:
         name = MOTION["scan_switch"]
         scan_switch = None
         if name:
-            if name not in switches and MOTION["STEP"] == 0:
-                print(f"WARNING: scan_switch '{name}' not found - set MOTION['scan_switch'] to one of "
-                      f"{switches} before moving (STEP 0 continues without it)")
-            elif name not in switches:
-                raise SafetyError(f"scan_switch '{name}' not found. Set MOTION['scan_switch'] to one of: "
-                                  f"{switches} (or None to use scan_pose with the planner)")
+            if name not in switches:
+                # Not fatal: scan_pose via the motion planner works on this machine
+                # (since the theta - 180 fix). Use the switch only if it exists.
+                print(f"NOTE: scan_switch '{name}' not found (switches: {switches or 'none'}) - "
+                      "using scan_pose with the motion planner instead")
             else:
                 scan_switch = Switch.from_robot(robot, name)
+                print(f"using arm-position-saver '{name}' for scan/home")
         return cls(robot, Motion.from_robot(robot, MOTION["motion"]), Gripper.from_robot(robot, MOTION["gripper"]),
                    Arm.from_robot(robot, CONFIG["arm"]), Camera.from_robot(robot, CONFIG["camera"]), scan_switch)
 
