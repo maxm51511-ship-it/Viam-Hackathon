@@ -179,3 +179,13 @@ Source: docs.viam.com/tutorials/pick-and-place (same hardware: xArm6, wrist D435
 | Saved poses | `arm-position-saver` joint replay (no planner) | `motion.move` to recorded poses (collision-aware) | Ours is safer; joint replay is a fallback if planning is slow |
 | Descend / lift | Unconstrained | Linear constraint | Stricter. If planning fails, try with `linear=False`. |
 | Deployment | Local script (uv), then an inline module with `do_command({"action": "pick_cycle"})` | Sandbox script | The inline module is the documented next step. |
+
+### Companion repo check (viam-devrel/pick-and-place: reference-solution.py, module-reference.py, machine-fragment.json)
+
+- **Imports:** all at the top of the file in every reference script. Our lazy imports caused the Sandbox `ResourceNotFoundError('motion', 'builtin')` (fixed in `89bb141`).
+- **Constants:** `GRIPPER_LENGTH_MM = -60`, `APPROACH_MM = -100`, `SETTLE_S = 0.3`. These match our `fingertip_offset_mm`, `approach_above_mm` and `settle_s`.
+- **Grasp height:** the reference places the fingertips at `geometry.center`, the object's centre. We now close at **mid-height** (`grasp_depth_frac = 0.5`) instead of 10 mm below the top.
+- **`motion.move` calls:** two per pick, with `component_name` set to the gripper, and no `world_state` or constraints. Ours has the same, plus an optional straight-line constraint.
+- **The reference has none of these:** a holding check, try/except, or a workspace fence. Ours adds all three as extra safety.
+- **`cam-1` in `machine-fragment.json`:** `align_color_depth: true`; frame `(-73, 40, 18)` θ270, parent `arm-1`. Check what our machine has (`sandbox/TESTING.md`).
+- **`arm-1` in `machine-fragment.json`:** `speed_degs_per_sec: 30`.

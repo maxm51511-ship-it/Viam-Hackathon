@@ -78,7 +78,7 @@ CONFIG = {
     "colour_dominance": 2.0,      # ...and this many times more points than the other class
     # Read-only cross-check: vision services already on the machine (from the
     # Sandbox template's resource list). Missing ones are skipped.
-    "compare_vision_services": ["color-detector", "color-cdbeb1", "color-cca68c", "Classification"],
+    "compare_vision_services": ["print-detector", "color-detector", "color-detector-copy", "Classification"],
 }
 
 
@@ -405,7 +405,10 @@ MOTION = {
     "extra_obstacles": [],
     "nudge_up_mm": 30.0,
     "approach_above_mm": 100.0,   # hover height above the print top
-    "grasp_depth_mm": 10.0,       # how far below the print top the fingertips go
+    # Where the fingers close, as a fraction of the object height measured down from
+    # the top: 0.5 = mid-height, like the Viam tutorial (fingertips at the object
+    # centre). Mid-height is the widest, firmest grip on a dome.
+    "grasp_depth_frac": 0.5,
     # Distance from the gripper FRAME origin (105 mm from the arm flange) down to
     # where the fingers close. Viam's xArm6 pick-and-place tutorial uses 60 mm
     # (GRIPPER_LENGTH_MM). Check in STEP 3: fingertips should hover approach_above_mm
@@ -521,7 +524,7 @@ def plan_pick(top_world, height_mm, scan_pose):
     usable = height_mm - MOTION["plate_clearance_mm"]
     if usable < 2.0:
         raise SafetyError(f"print too flat to pinch ({height_mm:.1f} mm)")
-    depth = min(MOTION["grasp_depth_mm"], usable)
+    depth = min(MOTION["grasp_depth_frac"] * height_mm, usable)
     # The poses below are for the GRIPPER FRAME origin, which sits
     # fingertip_offset_mm ABOVE the point where the fingers close (Viam
     # pick-and-place tutorial: GRIPPER_LENGTH_MM = 60 for this gripper).
