@@ -282,3 +282,14 @@ def test_viam_apis_registered_before_connect():
     )
     out = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=120)
     assert out.stdout.strip().endswith("OK"), out.stdout + out.stderr
+
+
+def test_linear_constraint_sets_orientation_tolerance(motion_cfg):
+    motion_cfg["I_AM_AT_THE_ESTOP"] = True
+    c = cell([scene("empty")])
+    run(c, 1)
+    (_, cons), = c.motion.calls
+    lc = cons.linear_constraint[0]
+    assert lc.line_tolerance_mm == motion_cfg["linear_tolerance_mm"]
+    assert lc.HasField("orientation_tolerance_degs")
+    assert lc.orientation_tolerance_degs == motion_cfg["linear_orientation_tolerance_degs"] > 0

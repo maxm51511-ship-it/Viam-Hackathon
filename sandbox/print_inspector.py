@@ -418,6 +418,7 @@ MOTION = {
     "plate_clearance_mm": 4.0,    # fingertips never closer than this to the plate
     "lift_mm": 120.0,
     "linear_tolerance_mm": 5.0,   # straight-line descend / lift
+    "linear_orientation_tolerance_degs": 5.0,  # gripper may tilt/turn this much along a straight line
     "linear_moves": True,         # set False if straight-line moves fail to plan
     # Software workspace fence (world frame). Every target is checked before moving.
     "workspace": {"min_z_mm": 5.0, "max_z_mm": 700.0, "min_reach_mm": 150.0, "max_reach_mm": 650.0},
@@ -492,8 +493,12 @@ async def move_gripper(cell, label, pose, linear=False):
         raise SafetyError("; ".join(problems))
     constraints = None
     if linear and MOTION["linear_moves"]:
+        # Set BOTH tolerances: orientation_tolerance_degs is optional in the proto,
+        # and leaving it unset hands the choice to the server's default (possibly
+        # 0 deg = orientation frozen along the whole path, which often fails to plan).
         constraints = Constraints(linear_constraint=[LinearConstraint(
-            line_tolerance_mm=MOTION["linear_tolerance_mm"])])
+            line_tolerance_mm=MOTION["linear_tolerance_mm"],
+            orientation_tolerance_degs=MOTION["linear_orientation_tolerance_degs"])])
     print(f"  -> move {label}{' (straight line)' if linear else ''}: {pose}")
     try:
         ok = await cell.motion.move(component_name=MOTION["gripper"],
