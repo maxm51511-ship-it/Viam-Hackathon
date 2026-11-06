@@ -259,3 +259,26 @@ def test_linear_moves_can_be_switched_off(motion_cfg):
     run(c, 1)
     (_, cons), = c.motion.calls
     assert cons is None
+
+
+def test_viam_apis_registered_before_connect():
+    """Regression for ResourceNotFoundError('motion', 'builtin') in the Sandbox:
+    RobotClient only creates handles for APIs registered at connect time, so the
+    script must import Motion/Gripper/Arm/Camera/Vision at MODULE level.
+    Runs in a fresh interpreter so other tests' imports can't mask the bug."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "sandbox" / "print_inspector.py"
+    code = (
+        "import importlib.util, sys\n"
+        f"s = importlib.util.spec_from_file_location('pi', r'{script}')\n"
+        "m = importlib.util.module_from_spec(s); s.loader.exec_module(m)\n"
+        "from viam.resource.registry import Registry\n"
+        "apis = ' '.join(str(k) for k in Registry.REGISTERED_APIS())\n"
+        "missing = [x for x in ('motion', 'gripper', 'arm', 'camera', 'vision') if x not in apis]\n"
+        "print('MISSING', missing) if missing else print('OK')\n"
+    )
+    out = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=120)
+    assert out.stdout.strip().endswith("OK"), out.stdout + out.stderr

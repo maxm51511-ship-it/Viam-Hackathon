@@ -40,6 +40,20 @@ import random
 import struct
 import time
 
+# All Viam imports MUST be at module level, BEFORE connecting: the SDK only
+# creates client handles at connect time for resource types (APIs) already
+# imported/registered. Importing Motion after connecting gives
+# ResourceNotFoundError('motion', 'builtin') even though 'builtin' exists.
+from viam.components.arm import Arm
+from viam.components.camera import Camera
+from viam.components.gripper import Gripper
+from viam.proto.common import (Geometry, GeometriesInFrame, Pose, PoseInFrame, RectangularPrism, Vector3,
+                               WorldState)
+from viam.proto.service.motion import Constraints, LinearConstraint
+from viam.robot.client import RobotClient
+from viam.services.motion import Motion
+from viam.services.vision import VisionClient
+
 # ----------------------------------------------------------------- settings
 CONFIG = {
     "camera": "cam",              # names from the hackathon machine config
@@ -287,7 +301,6 @@ def decide(observations, n_required):
 # ----------------------------------------------------------------- Viam I/O
 async def connect():
     """Same environment variables as the Sandbox template."""
-    from viam.robot.client import RobotClient
 
     addr = next((os.environ[k] for k in ("VIAM_MACHINE_ADDRESS", "VIAM_ADDRESS", "VIAM_ROBOT_ADDRESS",
                                          "MACHINE_ADDRESS") if os.environ.get(k)), None)
@@ -300,7 +313,6 @@ async def connect():
 
 
 async def to_world(robot, xyz):
-    from viam.proto.common import Pose, PoseInFrame
 
     q = PoseInFrame(reference_frame=CONFIG["camera"], pose=Pose(x=xyz[0], y=xyz[1], z=xyz[2], o_z=1))
     r = await robot.transform_pose(q, CONFIG["world_frame"])
@@ -309,7 +321,6 @@ async def to_world(robot, xyz):
 
 async def compare_vision_services(robot):
     """Print what the machine's existing vision services report (read-only)."""
-    from viam.services.vision import VisionClient
 
     present = {r.name for r in robot.resource_names}
     for name in CONFIG["compare_vision_services"]:
@@ -429,10 +440,6 @@ class Cell:
 
     @classmethod
     def from_robot(cls, robot):
-        from viam.components.arm import Arm
-        from viam.components.camera import Camera
-        from viam.components.gripper import Gripper
-        from viam.services.motion import Motion
 
         return cls(robot, Motion.from_robot(robot, MOTION["motion"]), Gripper.from_robot(robot, MOTION["gripper"]),
                    Arm.from_robot(robot, CONFIG["arm"]), Camera.from_robot(robot, CONFIG["camera"]))
@@ -462,7 +469,6 @@ def check_pose(label, pose):
 
 
 def world_state():
-    from viam.proto.common import Geometry, GeometriesInFrame, Pose, RectangularPrism, Vector3, WorldState
 
     boxes = MOTION["extra_obstacles"] or []
     if not boxes:
@@ -477,8 +483,6 @@ def world_state():
 async def move_gripper(cell, label, pose, linear=False):
     """Collision-aware gripper move via the motion service. Checks the fence
     first; on ANY failure stops all motion and re-raises."""
-    from viam.proto.common import Pose, PoseInFrame
-    from viam.proto.service.motion import Constraints, LinearConstraint
 
     problems = check_pose(label, pose)
     if problems:
