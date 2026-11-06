@@ -47,6 +47,7 @@ import time
 from viam.components.arm import Arm
 from viam.components.camera import Camera
 from viam.components.gripper import Gripper
+from viam.components.switch import Switch
 from viam.proto.common import (Geometry, GeometriesInFrame, Pose, PoseInFrame, RectangularPrism, Vector3,
                                WorldState)
 from viam.proto.service.motion import Constraints, LinearConstraint
@@ -392,6 +393,15 @@ MOTION = {
     "failed_bin_pose": {"x": 288.74, "y": -568.08, "z": 184.47,
                         "o_x": 0.05, "o_y": -0.03, "o_z": -1.0, "theta": -30.53},
     "home_pose": None,            # set below: home = scan pose (team decision 2026-11-06)
+    # Arm-position-saver (erh:vmodutils:arm-position-saver) holding the SCAN pose,
+    # added by a Viam dev. If set, the arm goes to scan/home with
+    # switch.set_position(2) ("go to saved pose", joint replay, no planner) instead
+    # of motion.move to scan_pose - avoids the planner's wrist/camera
+    # self-collision rejection. Must match the resource NAME in the CONFIGURE tab
+    # (STEP 0 lists all switches). None = use scan_pose with the motion planner.
+    # The code NEVER calls set_position(1) - that would overwrite the saved pose.
+    "scan_switch": "scan-pose",
+    "switch_move_timeout_s": 30.0,
     # Extra obstacles for the planner, world frame. The PRINTER is not one of the
     # machine's preconfigured obstacles (table, wall-front, wall-side, ceiling):
     #   [{"label": "printer_frame", "center": {"x": .., "y": .., "z": ..},
@@ -438,15 +448,28 @@ class Cell:
     """Handles to the machine: built from a RobotClient in the Sandbox, or from
     fakes in the offline tests."""
 
-    def __init__(self, robot, motion, gripper, arm, cam):
+    def __init__(self, robot, motion, gripper, arm, cam, scan_switch=None):
         self.robot, self.motion, self.gripper, self.arm, self.cam = robot, motion, gripper, arm, cam
+        self.scan_switch = scan_switch     # arm-position-saver for the scan pose, or None
         self.moves = []           # executed moves: (label, pose)
 
     @classmethod
     def from_robot(cls, robot):
-
+        switches = sorted(r.name for r in robot.resource_names if r.subtype == "switch")
+        print("switches on machine:", ", ".join(switches) or "none")
+        name = MOTION["scan_switch"]
+        scan_switch = None
+        if name:
+            if name not in switches and MOTION["STEP"] == 0:
+                print(f"WARNING: scan_switch '{name}' not found - set MOTION['scan_switch'] to one of "
+                      f"{switches} before moving (STEP 0 continues without it)")
+            elif name not in switches:
+                raise SafetyError(f"scan_switch '{name}' not found. Set MOTION['scan_switch'] to one of: "
+                                  f"{switches} (or None to use scan_pose with the planner)")
+            else:
+                scan_switch = Switch.from_robot(robot, name)
         return cls(robot, Motion.from_robot(robot, MOTION["motion"]), Gripper.from_robot(robot, MOTION["gripper"]),
-                   Arm.from_robot(robot, CONFIG["arm"]), Camera.from_robot(robot, CONFIG["camera"]))
+                   Arm.from_robot(robot, CONFIG["arm"]), Camera.from_robot(robot, CONFIG["camera"]), scan_switch)
 
 
 POSE_KEYS = ("x", "y", "z", "o_x", "o_y", "o_z", "theta")
@@ -518,6 +541,32 @@ async def current_gripper_pose(cell):
     return pose_dict(pif.pose)
 
 
+async def go_scan(cell, label="scan"):
+    """Go to the scan pose: via the arm-position-saver switch if configured
+    (set_position(2) = go to saved pose), else motion.move to scan_pose.
+    Returns the gripper pose (world) actually reached."""
+    if cell.scan_switch is None:
+        await move_gripper(cell, label, MOTION["scan_pose"])
+        return await current_gripper_pose(cell)
+    print(f"  -> move {label} via arm-position-saver '{MOTION['scan_switch']}' (set_position(2))")
+    try:
+        await cell.scan_switch.set_position(2)
+        t0 = time.time()
+        await asyncio.sleep(0.2)
+        while await cell.arm.is_moving():              # in case set_position returns early
+            if time.time() - t0 > MOTION["switch_move_timeout_s"]:
+                raise RuntimeError(f"arm still moving {MOTION['switch_move_timeout_s']} s after {label}")
+            await asyncio.sleep(0.2)
+    except Exception:
+        print("  !! move failed - stopping all motion")
+        await cell.robot.stop_all()
+        raise
+    reached = await current_gripper_pose(cell)
+    cell.moves.append((label, reached))
+    print(f"     reached gripper pose (world): {reached}")
+    return reached
+
+
 def plan_pick(top_world, height_mm, scan_pose):
     """Hover / grasp / lift poses above the print.
 
@@ -558,7 +607,7 @@ async def run_step(cell, step):
         require(m["I_AM_AT_THE_ESTOP"], "set MOTION['I_AM_AT_THE_ESTOP'] = True (someone at the E-stop) to move")
     if step not in (0, 1, 2, 3, 4, 5):
         raise SafetyError(f"unknown STEP {step}")
-    if 2 <= step <= 4:
+    if 2 <= step <= 4 and cell.scan_switch is None:
         probs = check_pose("scan_pose", m["scan_pose"])
         require(not probs, "; ".join(probs))
     if 3 <= step <= 4:
@@ -568,7 +617,7 @@ async def run_step(cell, step):
         for k in ("good_bin_pose", "failed_bin_pose"):
             probs = check_pose(k, m[k])
             require(not probs, "; ".join(probs))
-    if step == 5 or (step == 4 and m["home_pose"] is not None):
+    if cell.scan_switch is None and (step == 5 or (step == 4 and m["home_pose"] is not None)):
         probs = check_pose("home_pose", m["home_pose"])
         require(not probs, "; ".join(probs))
 
@@ -601,11 +650,14 @@ async def run_step(cell, step):
               f"expected +{m['nudge_up_mm']})")
         return "nudged"
 
-    if step == 5:
-        await move_gripper(cell, "home", m["home_pose"])
+    if step == 5:                       # home = scan pose
+        if cell.scan_switch is not None or m["home_pose"] == m["scan_pose"]:
+            await go_scan(cell, "home")
+        else:
+            await move_gripper(cell, "home", m["home_pose"])
         return "at home"
 
-    await move_gripper(cell, "scan", m["scan_pose"])
+    scan_here = await go_scan(cell, "scan")
     if step == 2:
         return "at scan pose"
 
@@ -617,7 +669,7 @@ async def run_step(cell, step):
         print(f"note: {len(obs['objects'])} objects - picking the largest only")
     target = obs["objects"][0]
     top_world = await to_world(cell.robot, target["top_center_cam_mm"])
-    poses = plan_pick(top_world, target["height_mm"], m["scan_pose"])
+    poses = plan_pick(top_world, target["height_mm"], scan_here)   # orientation actually reached at scan
     bin_name = "good_bin_pose" if verdict == "GOOD" else "failed_bin_pose"
     to_check = dict(poses)
     if step >= 4:
@@ -653,10 +705,10 @@ async def run_step(cell, step):
     await move_gripper(cell, bin_name, m[bin_name])
     await cell.gripper.open()
     await asyncio.sleep(m["settle_s"])
-    await move_gripper(cell, "scan", m["scan_pose"])
+    await go_scan(cell, "scan")
     after, why, _ = await inspect_plate(cell)
     print(f"plate after removal: {after} ({why})")
-    if m["home_pose"] is not None and m["home_pose"] != m["scan_pose"]:
+    if cell.scan_switch is None and m["home_pose"] is not None and m["home_pose"] != m["scan_pose"]:
         await move_gripper(cell, "home", m["home_pose"])   # already there if home == scan
     return "sorted" if after == "EMPTY" else "plate not clear"
 
@@ -694,8 +746,8 @@ async def main():
     robot = await connect()
     try:
         print("Resources:", ", ".join(sorted(r.name for r in robot.resource_names)))
-        cell = Cell.from_robot(robot)
         try:
+            cell = Cell.from_robot(robot)
             result = await run_step(cell, MOTION["STEP"])
             print(f"\nRESULT (STEP {MOTION['STEP']}): {result}")
         except SafetyError as e:

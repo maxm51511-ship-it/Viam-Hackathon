@@ -68,6 +68,21 @@ class FakeArm:
     async def get_end_position(self):
         return Pose(**SCAN)
 
+    async def is_moving(self):
+        return False
+
+
+class FakeSwitch:
+    """arm-position-saver: set_position(2) replays the saved (scan) pose."""
+
+    def __init__(self, motion, saved_pose):
+        self.motion, self.saved, self.calls = motion, saved_pose, []
+
+    async def set_position(self, position, **kw):
+        self.calls.append(position)
+        if position == 2:
+            self.motion.pose = dict(self.saved)
+
 
 class FakeCam:
     def __init__(self, scenes):
@@ -277,7 +292,7 @@ def test_viam_apis_registered_before_connect():
         "m = importlib.util.module_from_spec(s); s.loader.exec_module(m)\n"
         "from viam.resource.registry import Registry\n"
         "apis = ' '.join(str(k) for k in Registry.REGISTERED_APIS())\n"
-        "missing = [x for x in ('motion', 'gripper', 'arm', 'camera', 'vision') if x not in apis]\n"
+        "missing = [x for x in ('motion', 'gripper', 'arm', 'camera', 'vision', 'switch') if x not in apis]\n"
         "print('MISSING', missing) if missing else print('OK')\n"
     )
     out = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=120)
@@ -293,3 +308,55 @@ def test_linear_constraint_sets_orientation_tolerance(motion_cfg):
     assert lc.line_tolerance_mm == motion_cfg["linear_tolerance_mm"]
     assert lc.HasField("orientation_tolerance_degs")
     assert lc.orientation_tolerance_degs == motion_cfg["linear_orientation_tolerance_degs"] > 0
+
+
+
+# ------------------------------------------------------------ scan-pose switch
+# Saved pose differs from scan_pose (rotated wrist): proves we use what the arm REACHED.
+SAVED_SCAN = dict(SCAN, theta=-79.2)
+
+
+def switch_cell(scenes, **kw):
+    c = cell(scenes, **kw)
+    c.scan_switch = FakeSwitch(c.motion, SAVED_SCAN)
+    return c
+
+
+def test_step2_uses_switch_not_planner(motion_cfg):
+    motion_cfg["I_AM_AT_THE_ESTOP"] = True          # no scan_pose needed with a switch
+    c = switch_cell([scene("empty")])
+    assert run(c, 2) == "at scan pose"
+    assert c.scan_switch.calls == [2] and c.motion.calls == []
+
+
+def test_step5_home_uses_switch(motion_cfg):
+    motion_cfg["I_AM_AT_THE_ESTOP"] = True
+    c = switch_cell([scene("empty")])
+    assert run(c, 5) == "at home" and c.scan_switch.calls == [2]
+
+
+def test_step4_with_switch_uses_reached_orientation(motion_cfg):
+    ready(motion_cfg, 4)
+    c = switch_cell([scene("white_part")] * 3 + [scene("empty")])
+    assert run(c, 4) == "sorted"
+    assert c.scan_switch.calls == [2, 2]           # scan before inspect, scan after place
+    assert 1 not in c.scan_switch.calls            # never overwrite the saved pose
+    assert labels(c) == ["scan", "hover", "grasp", "lift", "good_bin_pose", "scan"]
+    assert dict(c.moves)["grasp"]["theta"] == pytest.approx(SAVED_SCAN["theta"])
+
+
+def test_missing_switch_name_is_refused(motion_cfg):
+    class R:
+        resource_names = []
+    motion_cfg.update(scan_switch="scan-pose", STEP=1)      # moving steps refuse
+    with pytest.raises(pi.SafetyError, match="scan_switch 'scan-pose' not found"):
+        pi.Cell.from_robot(R())
+
+
+def test_missing_switch_only_warns_in_step0(motion_cfg, capsys):
+    class R:
+        resource_names = []
+    motion_cfg.update(scan_switch="scan-pose", STEP=0)
+    with pytest.raises(AttributeError):   # past the switch check; then the bare fake robot has no services
+        pi.Cell.from_robot(R())
+    assert "WARNING: scan_switch 'scan-pose' not found" in capsys.readouterr().out
