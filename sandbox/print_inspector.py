@@ -678,8 +678,9 @@ wrist-mounted camera inside the wrist). The real arm may be fine there; the mode
      conversion needed).
   2. 3D SCENE tab: is the camera drawn where the real camera is? If it sits inside
      the wrist, the cam frame (CONFIGURE > cam > frame) is wrong - ask Viam staff.
-     Viam's tutorial uses (-73, 40, 18) theta 270 for this hardware; our PDF says
-     (73, -40, 18) theta 90.
+     Our machine's calibrated cam frame (2026-11-06): translation (-83, 14, 18),
+     ov (0.030, 0.004, 1.000) theta -97.7 - close to Viam's tutorial; the PDF's
+     (73, -40, 18) theta 90 is NOT right for this rig. Don't edit it - ask staff.
   3. Workaround: rotate the target 180 deg about the vertical (theta - 180) so the
      wrist turns the camera to the other side."""
 

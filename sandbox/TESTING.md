@@ -15,7 +15,7 @@ Run **one step per run** and don't skip ahead. After each run, set `"STEP": 0` a
 ## One-time machine checks (CONFIGURE tab, from the Viam pick-and-place tutorial)
 
 - [ ] **cam → attributes** include `"align_color_depth": true`, and `sensors` contains both `"color"` and `"depth"`. Without alignment, the colour of each depth point is wrong and red/white classification breaks. If it's missing, ask a Viam staff member before changing the machine config.
-- [ ] **cam → frame.** Viam's tutorial for this same hardware uses translation `(-73, 40, 18)` with orientation θ `270`. The overview PDF says `(73, -40, 18)` with θ `90`. Write down which one your machine has. If Test 4's hover is off-centre by roughly 8–15 cm, this frame is the likely cause.
+- [ ] **cam → frame.** Viam's tutorial for this same hardware uses translation `(-73, 40, 18)` with orientation θ `270`. The overview PDF says `(73, -40, 18)` with θ `90`. **Our machine (checked 2026-11-06):** translation (−83, 14, 18), ov (0.030, 0.004, 1.000) θ −97.7. That is calibrated and close to the tutorial, so leave it as it is. If Test 4's hover is off-centre by roughly 8–15 cm, this frame is the likely cause.
 - [ ] **gripper → frame** is translation z `105` (both sources agree).
 - [ ] **arm → attributes:** the tutorial sets `"speed_degs_per_sec": 30`. Check what yours is. Slow is good for first tests; ask Viam staff before changing it.
 

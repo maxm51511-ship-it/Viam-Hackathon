@@ -15,7 +15,7 @@ Source: the Viam overview PDF. Full detail in `docs/PLAN.md` §2.
 - **Machine:** in the hackathons org, Arm Farm location, already configured. Resource names are `arm`, `gripper`, `cam`, plus the builtin motion service and table/wall obstacles.
 - **Arm:** `viam:ufactory:xArm6` (confirmed), at the world origin.
 - **Gripper:** `viam:ufactory:gripper`. Frame is parent `arm`, z +105 mm. Motion planning moves the **gripper**.
-- **Camera:** `cam`, `viam:camera:realsense` D435. **Wrist-mounted:** parent `arm`, translation (73, −40, 18), orientation θ 90. Inspection therefore needs a scan pose.
+- **Camera:** `cam`, `viam:camera:realsense` D435. **Wrist-mounted:** parent `arm`. The machine's calibrated frame is translation (−83, 14, 18), θ −97.7 (the PDF's (73, −40, 18) θ 90 is wrong for this rig). Inspection needs a scan pose. Inspection therefore needs a scan pose.
 - **E-stop:** red button on the UFactory control box.
 - **No printer at the event:** the demo plate is a PEI sheet on a box. Props are red and white domes and a red-top/white cube. Bins are a wire basket and a paper plate.
 - **Unknown [U]:** gripper jaw opening, force/torque sensing.
