@@ -378,7 +378,11 @@ MOTION = {
     #     "dims_mm": {"x": .., "y": .., "z": ..}}]
     # Keep the boxes AROUND the bed, not over it. Set [] to say "none needed".
     # STEP 3 and 4 refuse to run while this is None.
-    "extra_obstacles": None,
+    # Demo setup (2026-11-06): NO printer - the "build plate" is a PEI sheet lying
+    # on a box, with nothing above it, and the arm approaches from above. The
+    # box sits BELOW the plate surface, and the fingertips stop
+    # plate_clearance_mm above the plate, so no extra obstacle is needed.
+    "extra_obstacles": [],
     "nudge_up_mm": 30.0,
     "approach_above_mm": 100.0,   # hover height above the print top
     "grasp_depth_mm": 10.0,       # how far below the print top the fingertips go

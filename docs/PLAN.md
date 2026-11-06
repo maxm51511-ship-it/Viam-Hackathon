@@ -13,7 +13,7 @@ _Source: the "[Code That Moves] Viam Overview" PDF handed out at the event, plus
 
 | Item | Status | Notes |
 |---|---|---|
-| Arm `arm` | **[C]** `viam:ufactory:xArm6` or `viam:ufactory:xArm850` | Frame: parent `world`, at the origin. Which of the two models we have: check the CONFIGURE tab. |
+| Arm `arm` | **[C]** `viam:ufactory:xArm6` (confirmed by the team) | Frame: parent `world`, at the origin. Reach is about 700 mm; our fence stops at 650 mm. |
 | Gripper `gripper` | **[C]** `viam:ufactory:gripper`, names its arm | Frame: parent `arm`, z +105 mm (the PDF says "probably"). For motion planning, move the **gripper**. Jaw opening is **[U]**: measure it. |
 | Camera `cam` | **[C]** `viam:camera:realsense`, D435 RGB + stereo depth | **Wrist-mounted.** Frame: parent `arm`, translation (73, −40, 18), orientation ov (0, 0, 1) θ 90°. Good enough for pick and place; use `viam:camera-calibration:handeye` for more precision. Because the camera moves with the arm, inspection needs a **scan pose**. |
 | Motion service | **[C]** builtin, plans around the obstacles | `Motion.move(component_name, destination, world_state, constraints)` (SDK 0.85.2). |
@@ -25,7 +25,7 @@ _Source: the "[Code That Moves] Viam Overview" PDF handed out at the event, plus
 | Helpers | **[C]** manual mode, `erh:vmodutils:arm-position-saver`, 3D SCENE tab | Use these to record the scan, bin and home poses. |
 | Data manager | **[C]** | Use it to collect training images later. |
 | xArm force/torque | **[U]** | Not in the PDF. Don't assume it. |
-| Printer: model, plate type | **[U]** | Decides the release strategy (section 5). |
+| Printer | **[C]** none at the event | Demo stand-in: a textured gold PEI sheet lying on a box. Props are red and white domes and a cube that is red on top and white below. Bins are a black wire basket and a white paper plate. |
 
 ### Demo decisions (team, 2026-11-06)
 

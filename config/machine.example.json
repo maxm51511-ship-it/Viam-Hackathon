@@ -5,7 +5,6 @@
       "name": "arm",
       "api": "rdk:component:arm",
       "model": "viam:ufactory:xArm6",
-      "_model_note": "or viam:ufactory:xArm850 - check the CONFIGURE tab",
       "attributes": { "_VERIFY": "preconfigured on the machine" },
       "frame": {
         "parent": "world",

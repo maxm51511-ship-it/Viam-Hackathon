@@ -13,11 +13,12 @@
 Source: the Viam overview PDF. Full detail in `docs/PLAN.md` §2.
 
 - **Machine:** in the hackathons org, Arm Farm location, already configured. Resource names are `arm`, `gripper`, `cam`, plus the builtin motion service and table/wall obstacles.
-- **Arm:** `viam:ufactory:xArm6` or `viam:ufactory:xArm850`, at the world origin.
+- **Arm:** `viam:ufactory:xArm6` (confirmed), at the world origin.
 - **Gripper:** `viam:ufactory:gripper`. Frame is parent `arm`, z +105 mm. Motion planning moves the **gripper**.
 - **Camera:** `cam`, `viam:camera:realsense` D435. **Wrist-mounted:** parent `arm`, translation (73, −40, 18), orientation θ 90. Inspection therefore needs a scan pose.
 - **E-stop:** red button on the UFactory control box.
-- **Unknown [U]:** printer model and plate, gripper jaw opening, force/torque sensing.
+- **No printer at the event:** the demo plate is a PEI sheet on a box. Props are red and white domes and a red-top/white cube. Bins are a wire basket and a paper plate.
+- **Unknown [U]:** gripper jaw opening, force/torque sensing.
 - **Demo rule:** red = failed, white = good, other = uncertain. No real failed prints; red items stand in for them.
 - **Dev machine:** Windows 11, Python 3.14.2. No `viam` CLI or `viam-server` installed (we don't need them; the machine is hosted).
 

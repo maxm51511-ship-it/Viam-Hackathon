@@ -25,9 +25,8 @@ _Validation: (S) = synthetic or unit tests only · (H) = validated on hardware. 
 
 ## Blocked on hardware information
 
-- [ ] Which arm model is on our machine (xArm6 or xArm850): check the CONFIGURE tab
 - [ ] Gripper jaw opening and finger length → `robot.gripper` in settings
-- [ ] Printer model, plate type (flexible sheet?), bed temperature access
+- [x] Arm is an xArm6; there is no printer (PEI sheet on a box stands in for it), so `extra_obstacles = []`
 - [ ] Force/torque feedback available on our xArm
 
 ## Awaiting hardware validation
