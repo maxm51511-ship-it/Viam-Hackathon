@@ -18,8 +18,16 @@ models/*.onnx
 datasets/print_defects/images/*/*
 datasets/print_defects/labels/*/*
 !datasets/print_defects/*/*/.gitkeep
+datasets/red_white/images/*/*
+datasets/red_white/labels/*/*
+!datasets/red_white/*/*/.gitkeep
+metadata/
+dataset.jsonl
+debug/
+raw_exports/
 
 # editors / os
 .vscode/settings.json
 .DS_Store
 Thumbs.db
+*.cache

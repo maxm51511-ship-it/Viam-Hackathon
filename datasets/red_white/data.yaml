@@ -1,0 +1,8 @@
+# Bootstrap dataset from 3 Viam exports: red filament = failed print demo
+# marker, white filament = good print demo marker. See README.md for
+# provenance per source and limitations.
+train: images/train
+val: images/val
+names:
+  0: failed
+  1: good
