@@ -227,3 +227,11 @@ def test_unknown_step_refused(motion_cfg):
     motion_cfg["I_AM_AT_THE_ESTOP"] = True
     with pytest.raises(pi.SafetyError, match="unknown STEP"):
         run(cell([scene("empty")]), 9)
+
+
+def test_step4_home_equal_to_scan_skips_extra_move(motion_cfg):
+    ready(motion_cfg, 4)
+    motion_cfg["home_pose"] = dict(SCAN)
+    c = cell([scene("white_part")] * 3 + [scene("empty")])
+    assert run(c, 4) == "sorted"
+    assert labels(c)[-1] == "scan" and "home" not in labels(c)

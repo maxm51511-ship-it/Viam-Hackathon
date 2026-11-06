@@ -380,7 +380,7 @@ MOTION = {
     # Reach 637 mm - close to the 650 mm fence; don't move this bin further out.
     "failed_bin_pose": {"x": 288.74, "y": -568.08, "z": 184.47,
                         "o_x": 0.05, "o_y": -0.03, "o_z": -1.0, "theta": -30.53},
-    "home_pose": None,            # safe resting position, clear of printer and bins
+    "home_pose": None,            # set below: home = scan pose (team decision 2026-11-06)
     # Extra obstacles for the planner, world frame. The PRINTER is not one of the
     # machine's preconfigured obstacles (table, wall-front, wall-side, ceiling):
     #   [{"label": "printer_frame", "center": {"x": .., "y": .., "z": ..},
@@ -401,6 +401,11 @@ MOTION = {
     # Software workspace fence (world frame). Every target is checked before moving.
     "workspace": {"min_z_mm": 5.0, "max_z_mm": 700.0, "min_reach_mm": 150.0, "max_reach_mm": 650.0},
 }
+
+
+# Home = scan pose: the arm rests looking down at the plate, ready for the next
+# inspection. Follows scan_pose automatically if you re-record it.
+MOTION["home_pose"] = dict(MOTION["scan_pose"]) if MOTION["scan_pose"] else None
 
 
 class SafetyError(RuntimeError):
@@ -615,8 +620,8 @@ async def run_step(cell, step):
     await move_gripper(cell, "scan", m["scan_pose"])
     after, why, _ = await inspect_plate(cell)
     print(f"plate after removal: {after} ({why})")
-    if m["home_pose"] is not None:
-        await move_gripper(cell, "home", m["home_pose"])
+    if m["home_pose"] is not None and m["home_pose"] != m["scan_pose"]:
+        await move_gripper(cell, "home", m["home_pose"])   # already there if home == scan
     return "sorted" if after == "EMPTY" else "plate not clear"
 
 
