@@ -40,6 +40,20 @@ import random
 import struct
 import time
 
+# All Viam imports MUST be at module level, BEFORE connecting: the SDK only
+# creates client handles at connect time for resource types (APIs) already
+# imported/registered. Importing Motion after connecting gives
+# ResourceNotFoundError('motion', 'builtin') even though 'builtin' exists.
+from viam.components.arm import Arm
+from viam.components.camera import Camera
+from viam.components.gripper import Gripper
+from viam.proto.common import (Geometry, GeometriesInFrame, Pose, PoseInFrame, RectangularPrism, Vector3,
+                               WorldState)
+from viam.proto.service.motion import Constraints, LinearConstraint
+from viam.robot.client import RobotClient
+from viam.services.motion import Motion
+from viam.services.vision import VisionClient
+
 # ----------------------------------------------------------------- settings
 CONFIG = {
     "camera": "cam",              # names from the hackathon machine config
@@ -287,7 +301,6 @@ def decide(observations, n_required):
 # ----------------------------------------------------------------- Viam I/O
 async def connect():
     """Same environment variables as the Sandbox template."""
-    from viam.robot.client import RobotClient
 
     addr = next((os.environ[k] for k in ("VIAM_MACHINE_ADDRESS", "VIAM_ADDRESS", "VIAM_ROBOT_ADDRESS",
                                          "MACHINE_ADDRESS") if os.environ.get(k)), None)
@@ -300,7 +313,6 @@ async def connect():
 
 
 async def to_world(robot, xyz):
-    from viam.proto.common import Pose, PoseInFrame
 
     q = PoseInFrame(reference_frame=CONFIG["camera"], pose=Pose(x=xyz[0], y=xyz[1], z=xyz[2], o_z=1))
     r = await robot.transform_pose(q, CONFIG["world_frame"])
@@ -309,7 +321,6 @@ async def to_world(robot, xyz):
 
 async def compare_vision_services(robot):
     """Print what the machine's existing vision services report (read-only)."""
-    from viam.services.vision import VisionClient
 
     present = {r.name for r in robot.resource_names}
     for name in CONFIG["compare_vision_services"]:
@@ -395,9 +406,16 @@ MOTION = {
     "nudge_up_mm": 30.0,
     "approach_above_mm": 100.0,   # hover height above the print top
     "grasp_depth_mm": 10.0,       # how far below the print top the fingertips go
+    # Distance from the gripper FRAME origin (105 mm from the arm flange) down to
+    # where the fingers close. Viam's xArm6 pick-and-place tutorial uses 60 mm
+    # (GRIPPER_LENGTH_MM). Check in STEP 3: fingertips should hover approach_above_mm
+    # above the print top. If they're higher/lower, adjust this number.
+    "fingertip_offset_mm": 60.0,
+    "settle_s": 0.3,              # pause after gripper open/grab (tutorial value)
     "plate_clearance_mm": 4.0,    # fingertips never closer than this to the plate
     "lift_mm": 120.0,
     "linear_tolerance_mm": 5.0,   # straight-line descend / lift
+    "linear_moves": True,         # set False if straight-line moves fail to plan
     # Software workspace fence (world frame). Every target is checked before moving.
     "workspace": {"min_z_mm": 5.0, "max_z_mm": 700.0, "min_reach_mm": 150.0, "max_reach_mm": 650.0},
 }
@@ -422,10 +440,6 @@ class Cell:
 
     @classmethod
     def from_robot(cls, robot):
-        from viam.components.arm import Arm
-        from viam.components.camera import Camera
-        from viam.components.gripper import Gripper
-        from viam.services.motion import Motion
 
         return cls(robot, Motion.from_robot(robot, MOTION["motion"]), Gripper.from_robot(robot, MOTION["gripper"]),
                    Arm.from_robot(robot, CONFIG["arm"]), Camera.from_robot(robot, CONFIG["camera"]))
@@ -455,7 +469,6 @@ def check_pose(label, pose):
 
 
 def world_state():
-    from viam.proto.common import Geometry, GeometriesInFrame, Pose, RectangularPrism, Vector3, WorldState
 
     boxes = MOTION["extra_obstacles"] or []
     if not boxes:
@@ -470,14 +483,12 @@ def world_state():
 async def move_gripper(cell, label, pose, linear=False):
     """Collision-aware gripper move via the motion service. Checks the fence
     first; on ANY failure stops all motion and re-raises."""
-    from viam.proto.common import Pose, PoseInFrame
-    from viam.proto.service.motion import Constraints, LinearConstraint
 
     problems = check_pose(label, pose)
     if problems:
         raise SafetyError("; ".join(problems))
     constraints = None
-    if linear:
+    if linear and MOTION["linear_moves"]:
         constraints = Constraints(linear_constraint=[LinearConstraint(
             line_tolerance_mm=MOTION["linear_tolerance_mm"])])
     print(f"  -> move {label}{' (straight line)' if linear else ''}: {pose}")
@@ -511,11 +522,20 @@ def plan_pick(top_world, height_mm, scan_pose):
     if usable < 2.0:
         raise SafetyError(f"print too flat to pinch ({height_mm:.1f} mm)")
     depth = min(MOTION["grasp_depth_mm"], usable)
+    # The poses below are for the GRIPPER FRAME origin, which sits
+    # fingertip_offset_mm ABOVE the point where the fingers close (Viam
+    # pick-and-place tutorial: GRIPPER_LENGTH_MM = 60 for this gripper).
+    # So: fingertips = gripper-frame z - fingertip_offset_mm.
+    tip = MOTION["fingertip_offset_mm"]
+    fingertips_z = top_z - depth
+    min_z = MOTION["workspace"]["min_z_mm"]
+    if fingertips_z < min_z:     # the fence applies to the fingertips, not just the gripper frame
+        raise SafetyError(f"grasp: fingertips would be at z={fingertips_z:.0f} mm - outside fence (min z {min_z} mm)")
     orient = {k: scan_pose[k] for k in ("o_x", "o_y", "o_z", "theta")}
     return {
-        "hover": {"x": x, "y": y, "z": round(top_z + MOTION["approach_above_mm"], 1), **orient},
-        "grasp": {"x": x, "y": y, "z": round(top_z - depth, 1), **orient},
-        "lift": {"x": x, "y": y, "z": round(top_z + MOTION["lift_mm"], 1), **orient},
+        "hover": {"x": x, "y": y, "z": round(top_z + MOTION["approach_above_mm"] + tip, 1), **orient},
+        "grasp": {"x": x, "y": y, "z": round(top_z - depth + tip, 1), **orient},
+        "lift": {"x": x, "y": y, "z": round(top_z + MOTION["lift_mm"] + tip, 1), **orient},
     }
 
 
@@ -600,16 +620,23 @@ async def run_step(cell, step):
 
     if step == 3:
         await move_gripper(cell, "hover", poses["hover"])
-        print("STEP 3 done - hovering above the print. Check it is centred before trying STEP 4.")
+        print("STEP 3 done - hovering above the print. Check it is centred, and that the FINGERTIPS are "
+              f"~{m['approach_above_mm']:.0f} mm above the print top, before trying STEP 4.")
         return "hovering"
 
-    await cell.gripper.open()
     await move_gripper(cell, "hover", poses["hover"])
+    await cell.gripper.open()
+    await asyncio.sleep(m["settle_s"])                 # let the fingers finish opening
     await move_gripper(cell, "grasp", poses["grasp"], linear=True)
     grabbed = await cell.gripper.grab()
-    status = await cell.gripper.is_holding_something()
-    holding = getattr(status, "is_holding_something", grabbed)
-    if not (grabbed and holding):
+    await asyncio.sleep(m["settle_s"])                 # let the grip settle
+    try:
+        status = await cell.gripper.is_holding_something()
+        holding = getattr(status, "is_holding_something", None)
+    except Exception:
+        holding = None                                 # not every gripper reports this
+    print(f"  grab() -> {grabbed}, is_holding_something -> {holding}")
+    if not grabbed and not holding:
         print("!! grasp failed - opening and backing off")
         await cell.gripper.open()
         await move_gripper(cell, "retreat", poses["hover"], linear=True)
@@ -617,12 +644,26 @@ async def run_step(cell, step):
     await move_gripper(cell, "lift", poses["lift"], linear=True)
     await move_gripper(cell, bin_name, m[bin_name])
     await cell.gripper.open()
+    await asyncio.sleep(m["settle_s"])
     await move_gripper(cell, "scan", m["scan_pose"])
     after, why, _ = await inspect_plate(cell)
     print(f"plate after removal: {after} ({why})")
     if m["home_pose"] is not None and m["home_pose"] != m["scan_pose"]:
         await move_gripper(cell, "home", m["home_pose"])   # already there if home == scan
     return "sorted" if after == "EMPTY" else "plate not clear"
+
+
+MOVE_FAILED_HINTS = """Likely causes (check in this order):
+  1. Arm is still in MANUAL MODE -> CONFIGURE > arm > Test > Control > Exit manual mode.
+  2. E-stop pressed or the arm controller is in an error state -> release the E-stop
+     (twist it), then try a 5-degree joint jog on the arm card. If THAT fails too,
+     the problem is the arm/controller, not this script - ask Viam staff.
+  3. Planning failed ('no solution', 'collision', 'timeout'):
+     - open the 3D SCENE tab: is the arm or gripper INSIDE an obstacle box (table,
+       wall-front, wall-side, ceiling)? If the start pose is in collision, every plan fails.
+     - is the target reachable? Try it from the MOTION tab in the app.
+     - straight-line moves are harder to plan: set MOTION["linear_moves"] = False and retry.
+  4. Check the LOGS tab for the arm / motion error at the same timestamp."""
 
 
 async def main():
@@ -635,6 +676,9 @@ async def main():
             print(f"\nRESULT (STEP {MOTION['STEP']}): {result}")
         except SafetyError as e:
             print(f"\nREFUSED (STEP {MOTION['STEP']}): {e}")
+        except Exception as e:
+            print(f"\nMOVE FAILED (STEP {MOTION['STEP']}): {type(e).__name__}: {e}")
+            print(MOVE_FAILED_HINTS)
         if MOTION["STEP"] == 0:
             print("\n--- cross-check: existing vision services on this machine")
             await compare_vision_services(robot)

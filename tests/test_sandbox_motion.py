@@ -83,8 +83,9 @@ class FakeCam:
 @pytest.fixture(autouse=True)
 def motion_cfg(monkeypatch):
     m = copy.deepcopy(pi.MOTION)
+    # isolate tests from the poses recorded in the real script
     m.update(STEP=0, I_AM_AT_THE_ESTOP=False, scan_pose=None, good_bin_pose=None, failed_bin_pose=None,
-             extra_obstacles=None)
+             home_pose=None, extra_obstacles=None)
     monkeypatch.setattr(pi, "MOTION", m)
     real_sleep = asyncio.sleep
     monkeypatch.setattr(pi.asyncio, "sleep", lambda s: real_sleep(0))
@@ -148,7 +149,9 @@ def test_step3_only_hovers(motion_cfg):
     assert run(c, 3) == "hovering"
     assert labels(c) == ["scan", "hover"]
     hover = c.moves[1][1]
-    assert hover["x"] == pytest.approx(SCAN["x"], abs=3) and hover["z"] == pytest.approx(115, abs=3)
+    # fingertips 100 mm above the 15 mm-tall part -> gripper frame 60 mm higher still
+    tip = motion_cfg["fingertip_offset_mm"]
+    assert hover["x"] == pytest.approx(SCAN["x"], abs=3) and hover["z"] - tip == pytest.approx(115, abs=3)
     assert c.gripper.events == []
 
 
@@ -235,3 +238,47 @@ def test_step4_home_equal_to_scan_skips_extra_move(motion_cfg):
     c = cell([scene("white_part")] * 3 + [scene("empty")])
     assert run(c, 4) == "sorted"
     assert labels(c)[-1] == "scan" and "home" not in labels(c)
+
+
+
+def test_fingertips_stay_above_plate_at_grasp(motion_cfg):
+    """Regression: the gripper frame is 60 mm above the fingertips (Viam tutorial).
+    Fingertips must stop plate_clearance_mm above the plate (world z = 0 here)."""
+    ready(motion_cfg, 4)
+    c = cell([scene("white_part")] * 3 + [scene("empty")])
+    run(c, 4)
+    grasp = dict(c.moves)["grasp"]
+    fingertips_z = grasp["z"] - motion_cfg["fingertip_offset_mm"]
+    assert fingertips_z >= motion_cfg["plate_clearance_mm"] - 1.5      # part is 15 mm tall, plate at 0
+    assert fingertips_z == pytest.approx(15 - motion_cfg["grasp_depth_mm"], abs=1.5)
+
+
+def test_linear_moves_can_be_switched_off(motion_cfg):
+    motion_cfg.update(I_AM_AT_THE_ESTOP=True, linear_moves=False)
+    c = cell([scene("empty")])
+    run(c, 1)
+    (_, cons), = c.motion.calls
+    assert cons is None
+
+
+def test_viam_apis_registered_before_connect():
+    """Regression for ResourceNotFoundError('motion', 'builtin') in the Sandbox:
+    RobotClient only creates handles for APIs registered at connect time, so the
+    script must import Motion/Gripper/Arm/Camera/Vision at MODULE level.
+    Runs in a fresh interpreter so other tests' imports can't mask the bug."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent.parent / "sandbox" / "print_inspector.py"
+    code = (
+        "import importlib.util, sys\n"
+        f"s = importlib.util.spec_from_file_location('pi', r'{script}')\n"
+        "m = importlib.util.module_from_spec(s); s.loader.exec_module(m)\n"
+        "from viam.resource.registry import Registry\n"
+        "apis = ' '.join(str(k) for k in Registry.REGISTERED_APIS())\n"
+        "missing = [x for x in ('motion', 'gripper', 'arm', 'camera', 'vision') if x not in apis]\n"
+        "print('MISSING', missing) if missing else print('OK')\n"
+    )
+    out = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=120)
+    assert out.stdout.strip().endswith("OK"), out.stdout + out.stderr

@@ -159,3 +159,23 @@ _Source: the "[Code That Moves] Viam Overview" PDF handed out at the event, plus
 **Later:**
 
 Bring up `viam-server` with the RealSense and run `tools/check_machine.py`. It tells us whether depth is aligned to colour, the image source names, and whether the intrinsics are valid. Then run `tools/capture_frames.py` on an empty plate, a good print and a failed print. Those captures go straight into tuning `plate.hsv_ranges` and the classifier thresholds with `tools/inspect_print.py --frames`.
+
+## 8. Cross-check against the Viam pick-and-place tutorial (2026-11-06)
+
+Source: docs.viam.com/tutorials/pick-and-place (same hardware: xArm6, wrist D435, UFactory gripper).
+
+| Topic | Tutorial | Ours | Status |
+|---|---|---|---|
+| Component passed to `motion.move` | `gripper-1` | `gripper` | Same |
+| Obstacles | Configured `vmodutils/obstacle` components, no WorldState in code | Same; `extra_obstacles = []` | Same |
+| Detect from a fixed observation pose | Always returns to home before detecting | Scan pose before every inspection | Same |
+| Gripper frame to grasp point | Gripper frame is 60 mm above where the fingers close (`GRIPPER_LENGTH_MM`) | **Was missing.** Grasp treated the gripper frame as the fingertips, about 60 mm too low. | **Fixed:** `fingertip_offset_mm = 60`, and the fence now checks the fingertips |
+| Settle after open/grab | 0.3 s sleeps | Was missing | **Fixed:** `settle_s = 0.3` |
+| Holding check | Not used | Aborted unless both `grab()` and `is_holding_something` were true | **Relaxed:** aborts only if both say nothing was grabbed |
+| Camera `align_color_depth: true` | Required | Not checked | **Check on the machine** (`sandbox/TESTING.md`) |
+| Camera frame | (-73, 40, 18) θ270 | PDF says (73, -40, 18) θ90 | **Mismatch, check on the machine.** Our code uses whatever the machine config says, through `transform_pose`. |
+| Object 3D position | `detections-to-segments` vision service, `geometry.center` in the cam frame | Our own point-cloud segmentation; top-surface centre converted to world | Different by design (no model or training needed); equivalent result |
+| Approach and descend | Move in the `cam-1` frame, then a relative descend in the gripper frame | Absolute world-frame poses computed once at scan time | Equivalent; ours doesn't depend on the camera having moved |
+| Saved poses | `arm-position-saver` joint replay (no planner) | `motion.move` to recorded poses (collision-aware) | Ours is safer; joint replay is a fallback if planning is slow |
+| Descend / lift | Unconstrained | Linear constraint | Stricter. If planning fails, try with `linear=False`. |
+| Deployment | Local script (uv), then an inline module with `do_command({"action": "pick_cycle"})` | Sandbox script | The inline module is the documented next step. |
