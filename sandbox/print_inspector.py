@@ -63,13 +63,18 @@ CONFIG = {
     "min_range_mm": 120,          # ignore points closer than this (gripper fingers in view)
     "max_range_mm": 800,          # ignore points farther than this
     "roi_tan": 0.45,              # only use the central view: |x/z|,|y/z| < roi_tan
-    "min_height_mm": 3.0,         # height above plate that counts as material
+    "min_height_mm": 15.0,        # height above plate that counts as material
+                                   # (was 3.0: too low - let through small debris/
+                                   # noise specks (h<25mm) that flicker between
+                                   # captures and broke decide()'s exact-match
+                                   # consensus; real demo parts are 30-60mm tall)
     "max_height_mm": 200.0,
     "ransac_iters": 150,
     "ransac_inlier_mm": 2.0,
     "min_plane_frac": 0.20,       # a plane must cover this much of the view to be the plate
     "grid_mm": 4.0,               # clustering cell size
     "min_object_points": 60,
+    "min_extent_mm": 20.0,         # drop thin depth-noise spikes (reflections etc)
     "point_stride": 2,            # use every Nth point (speed)
     # colour rule (HSV, h in degrees 0-360, s/v 0-1)
     "red_hue_max": 20, "red_hue_min": 330, "red_s_min": 0.50, "red_v_min": 0.20,
@@ -268,12 +273,15 @@ def analyze(pcd_bytes, cfg=CONFIG):
         cz = sum(p[2] for p in top) / len(top)
         us = [_dot(u, p[:3]) for p, _ in members]
         vs = [_dot(v, p[:3]) for p, _ in members]
+        extent_u, extent_v = max(us) - min(us), max(vs) - min(vs)
+        if extent_u < cfg["min_extent_mm"] or extent_v < cfg["min_extent_mm"]:
+            continue  # thin depth-noise spike (reflection etc), not a real object
         objects.append({
             "verdict": verdict,
             "points": total,
             "red_frac": round(red, 2), "white_frac": round(white, 2),
             "height_mm": round(heights[int(0.98 * (total - 1))], 1),
-            "extent_mm": (round(max(us) - min(us), 1), round(max(vs) - min(vs), 1)),
+            "extent_mm": (round(extent_u, 1), round(extent_v, 1)),
             "top_center_cam_mm": (round(cx, 1), round(cy, 1), round(cz, 1)),
         })
     objects.sort(key=lambda o: o["points"], reverse=True)
@@ -617,9 +625,16 @@ async def run_step(cell, step):
     if verdict not in ("GOOD", "FAILED"):
         print(f"no automatic action for {verdict}: {why}")
         return verdict
+    # Pick the largest object whose OWN verdict matches the overall verdict -
+    # NOT just objects[0]: with multiple objects on the plate (e.g. one GOOD,
+    # one FAILED), the largest object overall is not necessarily the one the
+    # overall verdict is about, and grabbing objects[0] unconditionally could
+    # pick up a GOOD part and drop it in the FAILED bin, or vice versa.
+    matching = [o for o in obs["objects"] if o["verdict"] == verdict]
+    require(matching, f"verdict {verdict} but no object has that verdict (internal inconsistency)")
     if len(obs["objects"]) > 1:
-        print(f"note: {len(obs['objects'])} objects - picking the largest only")
-    target = obs["objects"][0]
+        print(f"note: {len(obs['objects'])} objects ({len(matching)} match verdict {verdict}) - picking the largest")
+    target = matching[0]
     top_world = await to_world(cell.robot, target["top_center_cam_mm"])
     poses = plan_pick(top_world, target["height_mm"], m["scan_pose"])
     bin_name = "good_bin_pose" if verdict == "GOOD" else "failed_bin_pose"
