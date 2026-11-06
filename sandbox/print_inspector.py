@@ -10,6 +10,8 @@ MOTION IS OFF BY DEFAULT. Set MOTION["STEP"] (further down) to choose what a run
     STEP 4  full cycle: scan, inspect, pick, drop in good/failed bin, back to scan,
             verify plate is empty, then go to home_pose (if set).
     STEP 5  go to home_pose (the arm's safe resting position).
+    STEP 6  DEMO: repeat STEP 4 until the plate is empty (stops on anything
+            uncertain or a failed grab), then print a summary.
 Poses are absolute positions in the WORLD frame, whose origin (0,0,0) is the
 base of the arm, so the arm can always return to a recorded pose.
 Every STEP >= 1 also needs MOTION["I_AM_AT_THE_ESTOP"] = True. Only advance a
@@ -411,6 +413,7 @@ MOTION = {
     # box sits BELOW the plate surface, and the fingertips stop
     # plate_clearance_mm above the plate, so no extra obstacle is needed.
     "extra_obstacles": [],
+    "demo_max_cycles": 6,         # STEP 6: max objects to sort in one run
     "nudge_up_mm": 30.0,
     "approach_above_mm": 100.0,   # hover height above the print top
     # Where the fingers close, as a fraction of the object height measured down from
@@ -450,6 +453,7 @@ class Cell:
         self.robot, self.motion, self.gripper, self.arm, self.cam = robot, motion, gripper, arm, cam
         self.scan_switch = scan_switch     # arm-position-saver for the scan pose, or None
         self.moves = []           # executed moves: (label, pose)
+        self.sorted = []          # verdicts of objects dropped in a bin this run
 
     @classmethod
     def from_robot(cls, robot):
@@ -703,12 +707,39 @@ async def run_step(cell, step):
     await move_gripper(cell, bin_name, m[bin_name])
     await cell.gripper.open()
     await asyncio.sleep(m["settle_s"])
+    cell.sorted.append(verdict)
     await go_scan(cell, "scan")
     after, why, _ = await inspect_plate(cell)
     print(f"plate after removal: {after} ({why})")
     if cell.scan_switch is None and m["home_pose"] is not None and m["home_pose"] != m["scan_pose"]:
         await move_gripper(cell, "home", m["home_pose"])   # already there if home == scan
     return "sorted" if after == "EMPTY" else "plate not clear"
+
+
+async def run_demo(cell):
+    """STEP 6: sort everything on the plate, one object per cycle (each cycle is
+    a full STEP 4 with all its safety checks). Stops on EMPTY, UNCERTAIN or a
+    failed grab - never guesses."""
+    bar = "=" * 60
+    print(f"\n{bar}\n  DEMO: inspect -> pick -> sort, until the plate is empty\n{bar}")
+    result = "not started"
+    for cycle in range(1, MOTION["demo_max_cycles"] + 1):
+        print(f"\n######## cycle {cycle}")
+        result = await run_step(cell, 4)
+        if result == "plate not clear":
+            continue                                   # more on the plate -> next object
+        break
+    good, failed = cell.sorted.count("GOOD"), cell.sorted.count("FAILED")
+    ending = {"sorted": "plate is EMPTY - all done",
+              "EMPTY": "plate is EMPTY - all done",
+              "UNCERTAIN": "found something NOT clearly red or white -> HUMAN INSPECTION needed",
+              "grasp failed": "grab missed -> check the object position, then run again",
+              "plate not clear": f"stopped after {MOTION['demo_max_cycles']} cycles (demo_max_cycles)"}
+    print(f"\n{bar}")
+    print(f"  SORTED: {good} good (white) -> good bin, {failed} failed (red) -> failed bin")
+    print(f"  {ending.get(result, result)}")
+    print(bar)
+    return f"demo: {good} good, {failed} failed; last result: {result}"
 
 
 MOVE_FAILED_HINTS = """Likely causes (check in this order):
@@ -746,7 +777,12 @@ async def main():
         print("Resources:", ", ".join(sorted(r.name for r in robot.resource_names)))
         try:
             cell = Cell.from_robot(robot)
-            result = await run_step(cell, MOTION["STEP"])
+            if MOTION["STEP"] == 6:
+                require(MOTION["I_AM_AT_THE_ESTOP"],
+                        "set MOTION['I_AM_AT_THE_ESTOP'] = True (someone at the E-stop) to move")
+                result = await run_demo(cell)
+            else:
+                result = await run_step(cell, MOTION["STEP"])
             print(f"\nRESULT (STEP {MOTION['STEP']}): {result}")
         except SafetyError as e:
             print(f"\nREFUSED (STEP {MOTION['STEP']}): {e}")

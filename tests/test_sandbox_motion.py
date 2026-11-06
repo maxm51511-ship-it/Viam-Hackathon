@@ -355,3 +355,36 @@ def test_missing_switch_falls_back_to_planner(motion_cfg, capsys):
         with pytest.raises(AttributeError):   # past the switch check; the bare fake robot has no services
             pi.Cell.from_robot(R())
         assert "NOTE: scan_switch 'scan-pose' not found" in capsys.readouterr().out
+
+
+
+# ------------------------------------------------------------ STEP 6 demo
+def demo(c):
+    return asyncio.run(pi.run_demo(c))
+
+
+def test_demo_sorts_white_then_red_until_empty(motion_cfg):
+    ready(motion_cfg, 4)
+    # cycle 1: inspect white x3, verify sees red x3 (plate not clear)
+    # cycle 2: inspect red x3, verify sees empty
+    c = cell([scene("white_part")] * 3 + [scene("red_part")] * 6 + [scene("empty")])
+    out = demo(c)
+    assert c.sorted == ["GOOD", "FAILED"]
+    assert "good_bin_pose" in labels(c) and "failed_bin_pose" in labels(c)
+    assert labels(c).index("good_bin_pose") < labels(c).index("failed_bin_pose")
+    assert out.endswith("last result: sorted")
+
+
+def test_demo_stops_on_uncertain_without_picking(motion_cfg):
+    ready(motion_cfg, 4)
+    c = cell([scene("pink_part")])
+    out = demo(c)
+    assert c.sorted == [] and c.gripper.events == [] and labels(c) == ["scan"]
+    assert out.endswith("last result: UNCERTAIN")
+
+
+def test_demo_refused_without_estop(motion_cfg):
+    ready(motion_cfg, 4)
+    motion_cfg["I_AM_AT_THE_ESTOP"] = False
+    with pytest.raises(pi.SafetyError, match="E-stop"):
+        demo(cell([scene("white_part")]))
