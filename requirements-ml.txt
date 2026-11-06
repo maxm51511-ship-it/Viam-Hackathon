@@ -1,0 +1,4 @@
+# Optional: YOLO training/inference. Pulls in PyTorch (large download).
+# Not yet installed/verified in this environment.
+-r requirements.txt
+ultralytics>=8.3

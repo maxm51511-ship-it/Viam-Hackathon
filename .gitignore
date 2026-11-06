@@ -1,0 +1,25 @@
+# secrets
+.env
+viam-server.json
+*.secret.json
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# data / artifacts (large)
+data/
+logs/
+runs/
+models/*.pt
+models/*.onnx
+datasets/print_defects/images/*/*
+datasets/print_defects/labels/*/*
+!datasets/print_defects/*/*/.gitkeep
+
+# editors / os
+.vscode/settings.json
+.DS_Store
+Thumbs.db

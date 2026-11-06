@@ -1,0 +1,55 @@
+{
+  "_README": "REFERENCE ONLY - the hackathon machine (Arm Farm location, hackathons org) is already configured with arm, gripper, cam, motion and table/wall obstacles. Do NOT push this file over it (viam-machine-config REPLACES the whole config). Frames below are copied from the Viam overview PDF. Fields marked VERIFY are unconfirmed.",
+  "components": [
+    {
+      "name": "arm",
+      "api": "rdk:component:arm",
+      "model": "viam:ufactory:xArm6",
+      "_model_note": "or viam:ufactory:xArm850 - check the CONFIGURE tab",
+      "attributes": { "_VERIFY": "preconfigured on the machine" },
+      "frame": {
+        "parent": "world",
+        "translation": { "x": 0, "y": 0, "z": 0 },
+        "orientation": { "type": "ov_degrees", "value": { "x": 0, "y": 0, "z": 1, "th": 0 } }
+      }
+    },
+    {
+      "name": "gripper",
+      "api": "rdk:component:gripper",
+      "model": "viam:ufactory:gripper",
+      "attributes": { "arm": "arm" },
+      "frame": {
+        "parent": "arm",
+        "translation": { "x": 0, "y": 0, "z": 105 },
+        "orientation": { "type": "ov_degrees", "value": { "x": 0, "y": 0, "z": 1, "th": 0 } }
+      }
+    },
+    {
+      "name": "cam",
+      "api": "rdk:component:camera",
+      "model": "viam:camera:realsense",
+      "attributes": { "_VERIFY": "preconfigured; RealSense attributes include sensors, serial_number" },
+      "frame": {
+        "parent": "arm",
+        "translation": { "x": 73, "y": -40, "z": 18 },
+        "orientation": { "type": "ov_degrees", "value": { "x": 0, "y": 0, "z": 1, "th": 90 } }
+      },
+      "service_configs": [
+        {
+          "type": "data_manager",
+          "attributes": {
+            "capture_methods": [
+              { "method": "GetImages", "capture_frequency_hz": 0, "tags": ["print-plate"] }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "_obstacles_note": "table and wall obstacles exist on the machine as erh:vmodutils:obstacle components; the motion service plans around them. Direct arm moves (MoveToPosition / MoveToJointPositions) go straight through them.",
+  "_optional_services": {
+    "data_manager": { "api": "rdk:service:data_manager", "model": "rdk:builtin:builtin", "attributes": { "sync_interval_mins": 1 } },
+    "hand_eye_calibration": "viam:camera-calibration:handeye (for precise camera frame calibration)",
+    "arm_position_saver": "erh:vmodutils:arm-position-saver (record scan / bin / home poses)"
+  }
+}

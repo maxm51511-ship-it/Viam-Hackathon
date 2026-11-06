@@ -1,0 +1,14 @@
+# Ultralytics YOLO segmentation dataset.
+# `path` is omitted: Ultralytics then resolves train/val relative to this file's
+# directory (verify with your installed ultralytics version; set an absolute
+# `path:` if it does not).
+train: images/train
+val: images/val
+
+# Class ids MUST match printbot.types.MaterialClass values (names are mapped by string).
+names:
+  0: build_plate
+  1: printed_object
+  2: spaghetti
+  3: loose_filament
+  4: other_defect

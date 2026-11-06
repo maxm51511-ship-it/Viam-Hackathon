@@ -1,0 +1,32 @@
+{
+  "resources": {
+    "arm": "arm",
+    "gripper": "gripper",
+    "camera": "cam",
+    "motion": "builtin",
+    "vision": null
+  },
+  "camera": {
+    "color_source_name": null,
+    "depth_source_name": null,
+    "pcd_units": "auto"
+  },
+  "plate": {
+    "hsv_ranges": [{ "lower": [0, 0, 0], "upper": [179, 80, 90] }],
+    "roi_polygon_px": null,
+    "object_min_height_mm": 1.5
+  },
+  "classifier": {
+    "mode": "colour_demo",
+    "min_observations": 3,
+    "min_confidence_to_act": 0.7
+  },
+  "robot": {
+    "motion_enabled": false,
+    "named_poses": {},
+    "obstacles": [],
+    "gripper": { "max_opening_mm": null, "finger_length_mm": null },
+    "release_mode": "operator",
+    "failed_removal_mode": "human"
+  }
+}

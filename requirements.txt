@@ -1,0 +1,6 @@
+# Core runtime (verified installable on Windows / Python 3.14, 2026-11-06)
+viam-sdk==0.85.2
+numpy>=2.0
+opencv-python>=4.9
+# Tests
+pytest>=8
