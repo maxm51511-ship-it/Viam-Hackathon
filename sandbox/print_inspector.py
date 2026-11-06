@@ -307,11 +307,16 @@ async def connect():
     if addr is None:
         raise RuntimeError("machine address env var not found; paste the Sandbox template's connect() here. "
                            "VIAM_* vars present: " + ", ".join(k for k in os.environ if k.startswith("VIAM")))
-    # check_connection_interval=0 disables the background connection check, which
-    # can report a false 'Lost connection' while a long motion.move() call is running.
+    # Both check_connection_interval AND attempt_reconnect_interval must be 0 to
+    # fully disable the background connection-check task: the SDK starts it if
+    # EITHER is > 0, and attempt_reconnect_interval defaults to 1, not 0. A lone
+    # check_connection_interval=0 (as first tried here) does not actually stop
+    # the background check from firing a false 'Lost connection' during a long
+    # motion.move() call or multi-capture point-cloud read.
     opts = RobotClient.Options.with_api_key(api_key=os.environ["VIAM_API_KEY"],
                                             api_key_id=os.environ["VIAM_API_KEY_ID"],
-                                            check_connection_interval=0)
+                                            check_connection_interval=0,
+                                            attempt_reconnect_interval=0)
     return await RobotClient.at_address(addr, opts)
 
 
