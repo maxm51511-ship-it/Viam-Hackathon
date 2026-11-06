@@ -21,6 +21,15 @@ async def connect():
     """Return a connected ``RobotClient``. Caller must ``await robot.close()``."""
     from viam.robot.client import RobotClient
 
+    # Register every resource API we use BEFORE connecting: RobotClient only
+    # creates handles at connect time for APIs already imported, otherwise
+    # e.g. Motion.from_robot(robot, "builtin") raises ResourceNotFoundError.
+    import viam.components.arm  # noqa: F401
+    import viam.components.camera  # noqa: F401
+    import viam.components.gripper  # noqa: F401
+    import viam.services.motion  # noqa: F401
+    import viam.services.vision  # noqa: F401
+
     load_dotenv()
     missing = [k for k in ("VIAM_MACHINE_ADDRESS", "VIAM_API_KEY", "VIAM_API_KEY_ID") if not os.environ.get(k)]
     if missing:
