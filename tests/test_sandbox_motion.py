@@ -83,8 +83,9 @@ class FakeCam:
 @pytest.fixture(autouse=True)
 def motion_cfg(monkeypatch):
     m = copy.deepcopy(pi.MOTION)
+    # isolate tests from the poses recorded in the real script
     m.update(STEP=0, I_AM_AT_THE_ESTOP=False, scan_pose=None, good_bin_pose=None, failed_bin_pose=None,
-             extra_obstacles=None)
+             home_pose=None, extra_obstacles=None)
     monkeypatch.setattr(pi, "MOTION", m)
     real_sleep = asyncio.sleep
     monkeypatch.setattr(pi.asyncio, "sleep", lambda s: real_sleep(0))
