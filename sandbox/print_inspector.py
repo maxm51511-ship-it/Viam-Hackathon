@@ -307,8 +307,11 @@ async def connect():
     if addr is None:
         raise RuntimeError("machine address env var not found; paste the Sandbox template's connect() here. "
                            "VIAM_* vars present: " + ", ".join(k for k in os.environ if k.startswith("VIAM")))
+    # check_connection_interval=0 disables the background connection check, which
+    # can report a false 'Lost connection' while a long motion.move() call is running.
     opts = RobotClient.Options.with_api_key(api_key=os.environ["VIAM_API_KEY"],
-                                            api_key_id=os.environ["VIAM_API_KEY_ID"])
+                                            api_key_id=os.environ["VIAM_API_KEY_ID"],
+                                            check_connection_interval=0)
     return await RobotClient.at_address(addr, opts)
 
 
@@ -376,21 +379,25 @@ MOTION = {
     # Scan pose recorded 2026-11-06 from the ARM control card (arm end flange):
     #   x=98.98 y=-601.08 z=471.52 o=(0.04, 0.01, -1) theta=100.79
     # converted to the GRIPPER frame (105 mm further along the tool axis, per the
-    # machine's frame config). Verify: at this pose STEP 0 should print a
+    # machine's frame config). theta also converted flange -> gripper frame: the
+    # gripper frame is rotated 180 deg about z, so theta = 100.79 - 180 = -79.21.
+    # Verify: at this pose STEP 0 should print a
     # "gripper pose (world)" matching these values.
     "scan_pose": {"x": 103.18, "y": -600.03, "z": 366.61,
-                  "o_x": 0.04, "o_y": 0.01, "o_z": -1.0, "theta": 100.79},
+                  "o_x": 0.04, "o_y": 0.01, "o_z": -1.0, "theta": -79.21},
     # Good (WHITE) bin, recorded 2026-11-06 from the ARM card:
     #   x=46.86 y=-348.4 z=297.51 o=(0.03, -0.03, -1) theta=50.62
-    # converted to the gripper frame (105 mm along the tool axis).
+    # converted to the gripper frame (105 mm along the tool axis; theta - 180 deg
+    # because the gripper frame is rotated 180 deg about z: 50.62 -> -129.38).
     "good_bin_pose": {"x": 50.01, "y": -351.55, "z": 192.6,
-                      "o_x": 0.03, "o_y": -0.03, "o_z": -1.0, "theta": 50.62},
+                      "o_x": 0.03, "o_y": -0.03, "o_z": -1.0, "theta": -129.38},
     # Failed (RED) bin, recorded 2026-11-06 from the ARM card:
     #   x=283.5 y=-564.94 z=289.29 o=(0.05, -0.03, -1) theta=-30.53
-    # converted to the gripper frame (105 mm along the tool axis).
+    # converted to the gripper frame (105 mm along the tool axis; theta - 180 deg
+    # because the gripper frame is rotated 180 deg about z: -30.53 -> 149.47).
     # Reach 637 mm - close to the 650 mm fence; don't move this bin further out.
     "failed_bin_pose": {"x": 288.74, "y": -568.08, "z": 184.47,
-                        "o_x": 0.05, "o_y": -0.03, "o_z": -1.0, "theta": -30.53},
+                        "o_x": 0.05, "o_y": -0.03, "o_z": -1.0, "theta": 149.47},
     "home_pose": None,            # set below: home = scan pose (team decision 2026-11-06)
     # Extra obstacles for the planner, world frame. The PRINTER is not one of the
     # machine's preconfigured obstacles (table, wall-front, wall-side, ceiling):
