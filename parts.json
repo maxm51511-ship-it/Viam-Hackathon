@@ -1,0 +1,177 @@
+[
+  {
+    "label_id": 496,
+    "name": "Geometric Shapes - Cuboid.stl",
+    "bbox_min_mm": [
+      197.934,
+      143.144,
+      0.2
+    ],
+    "bbox_max_mm": [
+      216.213,
+      183.109,
+      49.8
+    ],
+    "size_mm": [
+      18.279,
+      39.965,
+      49.6
+    ],
+    "height_mm": 49.6,
+    "top_z_mm": 49.8,
+    "centroid_mm": [
+      207.398,
+      165.378,
+      25.496
+    ],
+    "bbox_center_mm": [
+      207.073,
+      163.127,
+      25.0
+    ],
+    "support_z_mm": [
+      0.2,
+      5.6
+    ]
+  },
+  {
+    "label_id": 518,
+    "name": "Geometric Shapes - Cylinder.stl",
+    "bbox_min_mm": [
+      119.335,
+      144.241,
+      0.2
+    ],
+    "bbox_max_mm": [
+      164.269,
+      195.824,
+      52.0
+    ],
+    "size_mm": [
+      44.934,
+      51.583,
+      51.8
+    ],
+    "height_mm": 51.8,
+    "top_z_mm": 52.0,
+    "centroid_mm": [
+      141.61,
+      170.27,
+      27.007
+    ],
+    "bbox_center_mm": [
+      141.802,
+      170.033,
+      26.1
+    ],
+    "support_z_mm": [
+      0.2,
+      3.8
+    ]
+  },
+  {
+    "label_id": 540,
+    "name": "Geometric Shapes - Square Pyramid.stl",
+    "bbox_min_mm": [
+      166.863,
+      29.811,
+      0.2
+    ],
+    "bbox_max_mm": [
+      212.294,
+      75.165,
+      49.2
+    ],
+    "size_mm": [
+      45.431,
+      45.354,
+      49.0
+    ],
+    "height_mm": 49.0,
+    "top_z_mm": 49.2,
+    "centroid_mm": [
+      189.616,
+      56.875,
+      17.879
+    ],
+    "bbox_center_mm": [
+      189.579,
+      52.488,
+      24.7
+    ],
+    "support_z_mm": [
+      0.2,
+      12.0
+    ]
+  },
+  {
+    "label_id": 562,
+    "name": "Geometric Shapes - Sphere.stl",
+    "bbox_min_mm": [
+      48.26,
+      157.986,
+      0.2
+    ],
+    "bbox_max_mm": [
+      92.837,
+      202.553,
+      45.0
+    ],
+    "size_mm": [
+      44.577,
+      44.567,
+      44.8
+    ],
+    "height_mm": 44.8,
+    "top_z_mm": 45.0,
+    "centroid_mm": [
+      70.548,
+      180.262,
+      23.429
+    ],
+    "bbox_center_mm": [
+      70.549,
+      180.269,
+      22.6
+    ],
+    "support_z_mm": [
+      0.2,
+      4.0
+    ]
+  },
+  {
+    "label_id": 584,
+    "name": "Geometric Shapes - Cube.stl",
+    "bbox_min_mm": [
+      55.199,
+      36.599,
+      0.2
+    ],
+    "bbox_max_mm": [
+      99.828,
+      98.172,
+      61.2
+    ],
+    "size_mm": [
+      44.629,
+      61.573,
+      61.0
+    ],
+    "height_mm": 61.0,
+    "top_z_mm": 61.2,
+    "centroid_mm": [
+      77.515,
+      67.777,
+      31.599
+    ],
+    "bbox_center_mm": [
+      77.513,
+      67.385,
+      30.7
+    ],
+    "support_z_mm": [
+      0.2,
+      21.8
+    ]
+  }
+]
