@@ -16,6 +16,8 @@ pi = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pi)
 
 WHITE, RED = (235, 235, 235), (30, 30, 210)   # BGR
+GOLD = (55, 160, 200)                           # BGR of a gold PEI sheet (RGB 200,160,55)
+ANY_PLATE = dict(pi.CONFIG, plate_colour=None)  # colour check off
 
 
 def to_pcd(bgr, depth, metres=True, rgb_type="F"):
@@ -36,7 +38,7 @@ def to_pcd(bgr, depth, metres=True, rgb_type="F"):
     return hdr.encode() + rec.tobytes()
 
 
-def scene(kind, plate=(40, 40, 40), seed=0):
+def scene(kind, plate=GOLD, seed=0):
     bgr, depth, rng = syn.base_scene(plate_bgr=plate, seed=seed)
     if kind == "white_part":
         syn.add_box(bgr, depth, size_mm=(30, 20), height_mm=15, color=WHITE)
@@ -65,12 +67,12 @@ def test_red_spaghetti_is_failed():
 
 
 def test_red_part_on_white_plate_uses_depth_not_colour():
-    obs = pi.analyze(to_pcd(*scene("red_part", plate=(230, 230, 230))))
+    obs = pi.analyze(to_pcd(*scene("red_part", plate=(230, 230, 230))), ANY_PLATE)
     assert [o["verdict"] for o in obs["objects"]] == ["FAILED"]
 
 
 def test_white_part_on_white_plate_still_found_by_depth():
-    obs = pi.analyze(to_pcd(*scene("white_part", plate=(230, 230, 230))))
+    obs = pi.analyze(to_pcd(*scene("white_part", plate=(230, 230, 230))), ANY_PLATE)
     assert [o["verdict"] for o in obs["objects"]] == ["GOOD"]
 
 
@@ -100,3 +102,31 @@ def test_mm_pcd_and_speed():
     obs = pi.analyze(data)
     assert obs["objects"][0]["verdict"] == "GOOD"
     assert time.time() - t < 10  # pure-python budget per capture at 640x480
+
+
+# ------------------------------------------------------------ plate colour
+def test_gold_plate_recognised_and_reported():
+    obs = pi.analyze(to_pcd(*scene("white_part")))
+    assert obs["plate_found"] and obs["plate"]["colour"] == "gold/yellow"
+    assert any("plate: gold/yellow" in n for n in obs["notes"])
+
+
+def test_plate_of_wrong_colour_is_rejected():
+    obs = pi.analyze(to_pcd(*scene("white_part", plate=(40, 40, 40))))   # grey plate, gold expected
+    assert not obs["plate_found"] and "plate colour" in obs["notes"][-1]
+    assert pi.decide([obs] * 3, 3)[0] == "UNCERTAIN"
+
+
+def test_object_beside_the_plate_is_ignored():
+    bgr, depth = scene("white_part")
+    syn.add_box(bgr, depth, center_px=(80, 240), size_mm=(20, 20), height_mm=15, color=RED)  # on the table area
+    obs = pi.analyze(to_pcd(bgr, depth))
+    assert [o["verdict"] for o in obs["objects"]] == ["GOOD"]
+
+
+def test_closer_white_surface_is_not_taken_as_plate():
+    rnd = __import__("random").Random(0)
+    white = [(rnd.uniform(-80, 80), rnd.uniform(-80, 0), 350.0, 230, 230, 230) for _ in range(3000)]
+    gold = [(rnd.uniform(-80, 80), rnd.uniform(0, 80), 400.0, 200, 160, 55) for _ in range(3000)]
+    (n, d, frac, pts), reason = pi.find_plate_plane(white + gold, pi.CONFIG)
+    assert reason is None and d == pytest.approx(400, abs=3)

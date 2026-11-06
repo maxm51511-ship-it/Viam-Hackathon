@@ -1,5 +1,7 @@
 # Testing vision in the Viam Sandbox
 
+**Real-world test plan:** [TESTING.md](TESTING.md). Copy only `print_inspector.py` into the Sandbox `main.py`.
+
 The script `print_inspector.py` runs **vision only**. It reads the arm's position and the camera, and it **never sends a motion command**.
 
 ## Steps
