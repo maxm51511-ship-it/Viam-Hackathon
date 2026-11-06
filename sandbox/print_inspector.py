@@ -669,6 +669,21 @@ MOVE_FAILED_HINTS = """Likely causes (check in this order):
   4. Check the LOGS tab for the arm / motion error at the same timestamp."""
 
 
+SELF_COLLISION_HINTS = """This is a PLANNING rejection - the arm did not move. In Viam's MODEL of the
+machine, the target pose puts two parts of the robot inside each other (e.g. the
+wrist-mounted camera inside the wrist). The real arm may be fine there; the model
+(camera frame/geometry) or the target pose is off. Fix in this order:
+  1. Re-record the target from STEP 0: put the arm at the pose with the arm card,
+     run STEP 0, and copy the printed 'gripper pose (world)' into MOTION (no 105 mm
+     conversion needed).
+  2. 3D SCENE tab: is the camera drawn where the real camera is? If it sits inside
+     the wrist, the cam frame (CONFIGURE > cam > frame) is wrong - ask Viam staff.
+     Viam's tutorial uses (-73, 40, 18) theta 270 for this hardware; our PDF says
+     (73, -40, 18) theta 90.
+  3. Workaround: rotate the target 180 deg about the vertical (theta - 180) so the
+     wrist turns the camera to the other side."""
+
+
 async def main():
     robot = await connect()
     try:
@@ -681,7 +696,7 @@ async def main():
             print(f"\nREFUSED (STEP {MOTION['STEP']}): {e}")
         except Exception as e:
             print(f"\nMOVE FAILED (STEP {MOTION['STEP']}): {type(e).__name__}: {e}")
-            print(MOVE_FAILED_HINTS)
+            print(SELF_COLLISION_HINTS if "self-collision" in str(e) else MOVE_FAILED_HINTS)
         if MOTION["STEP"] == 0:
             print("\n--- cross-check: existing vision services on this machine")
             await compare_vision_services(robot)
