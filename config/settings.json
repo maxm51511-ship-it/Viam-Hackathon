@@ -12,8 +12,7 @@
     "pcd_units": "auto"
   },
   "plate": {
-    "hsv_ranges": [{ "lower": [12, 38, 51], "upper": [33, 217, 255] }],
-    "_hsv_note": "gold PEI sheet; OpenCV units (H = degrees/2, S/V 0-255) = h 25-65 deg, s 0.15-0.85, v >= 0.2, same as the sandbox plate_colour",
+    "hsv_ranges": [{ "lower": [0, 0, 0], "upper": [179, 80, 90] }],
     "roi_polygon_px": null,
     "object_min_height_mm": 1.5
   },

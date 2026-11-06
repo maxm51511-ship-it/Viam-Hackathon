@@ -54,14 +54,6 @@ CONFIG = {
     "ransac_iters": 150,
     "ransac_inlier_mm": 2.0,
     "min_plane_frac": 0.20,       # a plane must cover this much of the view to be the plate
-    # Build-plate colour: our plate is a textured GOLD PEI sheet. Only a large plane
-    # with this colour is accepted as the plate (not the white table or the box).
-    # HSV: h in degrees, s/v 0-1. Set "plate_colour": None to accept any colour.
-    # Tune with the "plate: <name> HSV(h, s, v)" line STEP 0 prints.
-    "plate_colour": {"h_min": 25, "h_max": 65, "s_min": 0.15, "s_max": 0.85, "v_min": 0.20},
-    "plate_match_frac": 0.50,     # share of plane points that must be plate-coloured
-    "plate_edge_margin_mm": 0.0,  # objects must lie inside the plate outline (+ margin)
-    "ignore_plate_coloured_points": True,
     "grid_mm": 4.0,               # clustering cell size
     "min_object_points": 60,
     "point_stride": 2,            # use every Nth point (speed)
@@ -168,42 +160,10 @@ def fit_plane(points, iters, inlier_mm, seed=0):
     return n, d, best_count / len(sample)
 
 
-def _hsv(p):
-    h, s, v = colorsys.rgb_to_hsv(p[3] / 255.0, p[4] / 255.0, p[5] / 255.0)
-    return h * 360.0, s, v
-
-
-def is_plate_coloured(p, pc):
-    h, s, v = _hsv(p)
-    return pc["h_min"] <= h <= pc["h_max"] and pc["s_min"] <= s <= pc["s_max"] and v >= pc["v_min"]
-
-
-def colour_name(h, s, v):
-    if v < 0.2:
-        return "black"
-    if s < 0.15:
-        return "white" if v > 0.7 else "grey"
-    for limit, name in ((15, "red"), (40, "orange/bronze"), (70, "gold/yellow"), (170, "green"),
-                        (260, "blue"), (330, "purple/pink"), (361, "red")):
-        if h < limit:
-            return name
-    return "red"
-
-
-def describe_colour(points):
-    """Median HSV of a point set -> (name, (h, s, v))."""
-    sample = points[:: max(1, len(points) // 400)]
-    hsv = [_hsv(p) for p in sample]
-    med = tuple(sorted(c[i] for c in hsv)[len(hsv) // 2] for i in range(3))
-    return colour_name(*med), (round(med[0]), round(med[1], 2), round(med[2], 2))
-
-
 def find_plate_plane(points, cfg):
-    """Return (plane, reason). plane = (n, d, frac, inlier_points).
-
-    The table is usually visible BEHIND the plate, and the biggest plane is not
-    necessarily the plate. Extract up to 3 large planes; keep those whose colour
-    matches cfg["plate_colour"] (if set); return the one CLOSEST to the camera."""
+    """The table/floor is usually visible BEHIND the plate, and the biggest plane
+    is not necessarily the plate. Extract up to 3 planes and return the one
+    CLOSEST to the camera that still covers >= min_plane_frac of the view."""
     remaining, planes, total = list(points), [], len(points)
     for k in range(3):
         if len(remaining) < 300:
@@ -216,26 +176,9 @@ def find_plate_plane(points, cfg):
         frac = sum(inl) / total
         if frac < cfg["min_plane_frac"]:
             break
-        planes.append((n, d, frac, [p for p, i in zip(remaining, inl) if i]))
+        planes.append((n, d, frac))
         remaining = [p for p, i in zip(remaining, inl) if not i]
-    if not planes:
-        return None, "no large plane (plate) found in view"
-
-    pc = cfg.get("plate_colour")
-    if pc:
-        matching = []
-        seen = []
-        for pl in planes:
-            sample = pl[3][:: max(1, len(pl[3]) // 500)]
-            match = sum(is_plate_coloured(p, pc) for p in sample) / len(sample)
-            name, hsv = describe_colour(pl[3])
-            seen.append(f"{name} {hsv} at {pl[1]:.0f} mm ({match:.0%} plate-coloured)")
-            if match >= cfg["plate_match_frac"]:
-                matching.append(pl)
-        if not matching:
-            return None, "no large plane has the plate colour; planes seen: " + "; ".join(seen)
-        planes = matching
-    return min(planes, key=lambda pl: pl[1]), None
+    return min(planes, key=lambda pl: pl[1]) if planes else None
 
 
 def colour_class(r, g, b, cfg):
@@ -257,36 +200,21 @@ def analyze(pcd_bytes, cfg=CONFIG):
     if len(roi) < 500:
         return {"plate_found": False, "objects": [], "notes": notes + ["too few points in view (range/ROI)"]}
 
-    fit, reason = find_plate_plane(roi, cfg)
+    fit = find_plate_plane([p[:3] for p in roi], cfg)
     if fit is None:
-        return {"plate_found": False, "objects": [], "notes": notes + [reason]}
-    n, d, inlier_frac, plate_pts = fit
-    pname, phsv = describe_colour(plate_pts)
+        return {"plate_found": False, "objects": [], "notes": notes + ["no large plane (plate) found in view"]}
+    n, d, inlier_frac = fit
+    notes.append(f"plate plane: {inlier_frac:.0%} of view, {d:.0f} mm from camera")
 
     # in-plane basis for clustering
     ref = (1.0, 0.0, 0.0) if abs(n[0]) < 0.9 else (0.0, 1.0, 0.0)
     u = _norm(_cross(n, ref))
     v = _cross(n, u)
 
-    # plate footprint (robust 2-98 % extent of plate points, in plane coordinates)
-    pu = sorted(_dot(u, p) for p in plate_pts)
-    pv = sorted(_dot(v, p) for p in plate_pts)
-    lo, hi = int(0.02 * (len(pu) - 1)), int(0.98 * (len(pu) - 1))
-    m = cfg["plate_edge_margin_mm"]
-    u_rng, v_rng = (pu[lo] - m, pu[hi] + m), (pv[lo] - m, pv[hi] + m)
-    notes.append(f"plate: {pname} HSV{phsv}, {inlier_frac:.0%} of view, {d:.0f} mm from camera, "
-                 f"~{u_rng[1] - u_rng[0]:.0f} x {v_rng[1] - v_rng[0]:.0f} mm")
-
-    pc = cfg.get("plate_colour") if cfg.get("ignore_plate_coloured_points") else None
     cells = {}
     for p in roi:
         h = _dot(n, p[:3]) + d
         if cfg["min_height_mm"] < h < cfg["max_height_mm"]:
-            pu_, pv_ = _dot(u, p[:3]), _dot(v, p[:3])
-            if not (u_rng[0] <= pu_ <= u_rng[1] and v_rng[0] <= pv_ <= v_rng[1]):
-                continue                      # not over the plate (bins, things on the table)
-            if pc and is_plate_coloured(p, pc):
-                continue                      # plate-coloured speckle / edge pixels
             key = (int(math.floor(_dot(u, p[:3]) / cfg["grid_mm"])), int(math.floor(_dot(v, p[:3]) / cfg["grid_mm"])))
             cells.setdefault(key, []).append((p, h))
 
@@ -335,8 +263,7 @@ def analyze(pcd_bytes, cfg=CONFIG):
             "top_center_cam_mm": (round(cx, 1), round(cy, 1), round(cz, 1)),
         })
     objects.sort(key=lambda o: o["points"], reverse=True)
-    return {"plate_found": True, "objects": objects, "notes": notes,
-            "plate": {"colour": pname, "hsv": phsv, "distance_mm": round(d)}}
+    return {"plate_found": True, "objects": objects, "notes": notes}
 
 
 def decide(observations, n_required):

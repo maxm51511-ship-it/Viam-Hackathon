@@ -18,7 +18,7 @@ Run **one step per run** and don't skip ahead. After each run, set `"STEP": 0` a
 2. In `MOTION`, check that `"STEP": 0` is set, then press **Run**.
 3. **Pass if:**
    - `gripper pose (world)` shows about `x 103, y -600, z 367`. That confirms the 105 mm gripper offset. If it shows `z ≈ 471`, **stop and tell us**: the saved positions are then 105 mm off.
-   - The `plate:` line names a gold/orange colour and covers 40% or more of the view, for example: `plate: gold/yellow HSV(43, 0.6, 0.7), 55% of view, 340 mm from camera`.
+   - The `plate plane:` line covers 40% or more of the view, at about the sheet's distance from the camera, for example: `plate plane: 55% of view, 340 mm from camera`.
    - The console shows `object 0: GOOD`, `white=` above 0.35, a height close to the dome's real height, and `VERDICT: GOOD`.
    - All four positions are reported as `OK`.
 4. Repeat with the **red dome**: expect `VERDICT: FAILED`.
@@ -28,7 +28,7 @@ Run **one step per run** and don't skip ahead. After each run, set `"STEP": 0` a
 
 | Problem in the output | Fix in `CONFIG` |
 |---|---|
-| `no large plane has the plate colour; planes seen: ...` | Read the HSV values of the plane at the sheet's distance and widen `plate_colour` to include them. Or set `"plate_colour": None` to turn the colour check off. |
+| `no large plane (plate) found in view` | Make the sheet fill more of the view (lower the scan position), or lower `min_plane_frac`. |
 | `too few points in view` | Lower the scan position (closer to the sheet), or raise `max_range_mm`. |
 | White dome shows `UNCERTAIN` | Lower `white_v_min` (try 0.5) or raise `white_s_max` (try 0.3). |
 | Red dome shows `UNCERTAIN` | Lower `red_s_min` (try 0.45). |
